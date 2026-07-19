@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+import hashlib
 import importlib
 from pathlib import Path
 import re
@@ -11,12 +12,14 @@ import pytest
 
 
 BASELINE_COMMIT = "c90f02f30df4ce65328ff397714cc06c4d7b1a27"
-ALLOWED_WP01_PATHS = {
-    "pyproject.toml",
+CORRECTION_BASE_COMMIT = "1dae65c1678ab8e31b6e849545d9ef1090048abc"
+CORRECTION_BRANCH = "fix-chinese-process-docs"
+SPEC_DIGEST = "01a30b5fcfd728bb8c334fdb76173e4d83e2667fc9b97a05672ce773f80e238e"
+PLAN_DIGEST = "571c5b4cbbede66039cb6531b5512ea41a8c187d4a86225331e8d66b2ad6d37f"
+ALLOWED_CORRECTION_PATHS = {
     "SPEC_PROCESS.md",
     "AGENT_LOG.md",
     "REFLECTION.md",
-    "src/coding_harness/__init__.py",
     "tests/unit/agent/test_actions.py",
 }
 WP01_REQUIREMENTS = (
@@ -328,7 +331,7 @@ def _git(*args: str, cwd: Path = ROOT) -> str:
         f"git command failed: command={command!r}, cwd={str(cwd)!r}, "
         f"exit={completed.returncode}, stdout={completed.stdout!r}, stderr={completed.stderr!r}"
     )
-    return completed.stdout.strip()
+    return completed.stdout.rstrip("\n")
 
 
 def _porcelain_paths(output: str) -> set[str]:
@@ -356,6 +359,42 @@ def _main_worktree() -> Path:
             matches.append(Path(worktree))
     assert len(matches) == 1, f"expected one main worktree in git worktree list, found {matches}"
     return matches[0]
+
+
+def _validate_process_evidence_text(text: str, *, source: str) -> None:
+    section_match = re.search(r"^## 证据台账\n(?P<body>.*?)(?=^## )", text, re.MULTILINE | re.DOTALL)
+    assert section_match, f"{source}: 缺少证据台账章节，无法验证过程语义"
+    body = section_match.group("body")
+    paragraph = next((item.strip() for item in body.split("\n\n") if "未来支持证据" in item), "")
+    expected = ("未来支持证据", "PENDING", "计划测试", "Requirement", "PLANNED", "不会", "改变")
+    missing = [item for item in expected if item not in paragraph]
+    assert not missing, (
+        f"{source}: 缺失过程语义元素 {missing}；期望中文含义为未来支持证据仍为 PENDING，"
+        f"且计划测试不会改变 Requirement 的 PLANNED 状态；实际相关文本={paragraph!r}"
+    )
+
+
+def _validate_correction_context(
+    *, branch: str, head: str, staged_paths: set[str], dirty_paths: set[str],
+    main_branch: str, main_head: str, main_status: str,
+) -> None:
+    assert branch == CORRECTION_BRANCH, (
+        f"纠正工作树分支不匹配：期望 {CORRECTION_BRANCH!r}，实际 {branch!r}；HEAD={head}"
+    )
+    assert head, f"纠正工作树 HEAD 为空：branch={branch!r}"
+    assert not staged_paths, (
+        f"纠正工作树存在 staged 路径：{sorted(staged_paths)}；branch={branch!r}；HEAD={head}"
+    )
+    unexpected = sorted(dirty_paths - ALLOWED_CORRECTION_PATHS)
+    assert not unexpected, (
+        f"纠正工作树存在越界 dirty 路径：{unexpected}；全部 dirty={sorted(dirty_paths)}；"
+        f"branch={branch!r}；HEAD={head}"
+    )
+    assert main_branch == "main", f"主工作树分支不匹配：实际 {main_branch!r}"
+    assert main_head == BASELINE_COMMIT, (
+        f"主工作树 HEAD 不匹配：期望 {BASELINE_COMMIT}，实际 {main_head}"
+    )
+    assert not main_status, f"主工作树不干净：{main_status!r}"
 
 
 def test_traceability_has_207_unique_rows():
@@ -439,22 +478,26 @@ def test_no_stretch_goal_is_mvp():
 
 def test_worktree_baseline_is_clean():
     branch = _git("branch", "--show-current")
-    assert branch == "wp-01-process-baseline", f"linked worktree branch mismatch: {branch!r}"
-    _git("merge-base", "--is-ancestor", BASELINE_COMMIT, "HEAD")
     head = _git("rev-parse", "HEAD")
-    assert head == BASELINE_COMMIT, f"linked worktree HEAD mismatch: expected {BASELINE_COMMIT}, got {head}"
+    _git("merge-base", "--is-ancestor", CORRECTION_BASE_COMMIT, "HEAD")
     assert not _git("diff", "--", "SPEC.md", "PLAN.md", ".gitignore")
-    assert not _git("diff", "--cached", "--name-only")
+    assert hashlib.sha256(SPEC.read_bytes()).hexdigest() == SPEC_DIGEST, "SPEC.md 冻结摘要不匹配"
+    assert hashlib.sha256(PLAN.read_bytes()).hexdigest() == PLAN_DIGEST, "PLAN.md 冻结摘要不匹配"
+    staged_paths = set(filter(None, _git("diff", "--cached", "--name-only").splitlines()))
     dirty_paths = _porcelain_paths(_git("status", "--porcelain=v1", "--untracked-files=all"))
-    unexpected = sorted(dirty_paths - ALLOWED_WP01_PATHS)
-    assert not unexpected, f"unexpected linked-worktree dirty paths: {unexpected}; all dirty={sorted(dirty_paths)}"
     main_root = _main_worktree()
     main_branch = _git("branch", "--show-current", cwd=main_root)
-    assert main_branch == "main", f"main worktree branch mismatch at {main_root}: {main_branch!r}"
     main_head = _git("rev-parse", "HEAD", cwd=main_root)
-    assert main_head == BASELINE_COMMIT, f"main worktree HEAD mismatch: expected {BASELINE_COMMIT}, got {main_head}"
     main_status = _git("status", "--porcelain=v1", "--untracked-files=all", cwd=main_root)
-    assert not main_status, f"main worktree is dirty at {main_root}: {main_status!r}"
+    _validate_correction_context(
+        branch=branch,
+        head=head,
+        staged_paths=staged_paths,
+        dirty_paths=dirty_paths,
+        main_branch=main_branch,
+        main_head=main_head,
+        main_status=main_status,
+    )
 
 
 def test_action_schema_missing_fails():
@@ -510,5 +553,4 @@ def test_spec_requirement(requirement_id: str):
     assert evidence.final_categories == expected_final
     assert evidence.is_mvp
     process = (ROOT / "SPEC_PROCESS.md").read_text()
-    assert "Future supporting evidence slots remain `PENDING`" in process
-    assert "Passing a WP-01 planning test does not change any Requirement from `PLANNED`" in process
+    _validate_process_evidence_text(process, source="SPEC_PROCESS.md")
