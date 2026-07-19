@@ -1,0 +1,17 @@
+# WP-01 Interim Reflection
+
+The project scope is the frozen AI4SE Coding Agent Harness MVP. WP-01 establishes repository, worktree, process, import-root, traceability tests, and an intentional first Red without implementing product behavior owned by WP-02.
+
+The linked worktree isolates approved Day 1 changes from clean `main` while sharing the baseline commit. The legal Red is specifically the missing `coding_harness.agent.actions.parse_action`: creating the parent package, a stub, or a Green result would cross WP-02 ownership.
+
+The earlier sandbox made Git metadata read-only and blocked the proxy path used during bootstrap. Under the current profile, the approved pytest bootstrap was verified. Collection was verified at exactly 19 tests with exit 0. The legal Red was verified at 18 passed and 1 failed with exit 1; its expected failing node is `tests/unit/agent/test_actions.py::test_action_schema_missing_fails`.
+
+The first full Red was illegal (16 passed and 3 failed): the Requirement parser omitted the 16 normative two-letter `WS` IDs, and generated cache paths violated the controlled dirty-path assertion. The fix cycle narrowed the parser to normative bullet definitions while accepting two- or three-letter prefixes, removed the generated caches, and disabled bytecode and pytest cache generation for subsequent evidence runs.
+
+Current risks are accidental scope expansion, conflating PLAN planned categories with SPEC Appendix H final categories, treating supporting packages as owners, or turning planned process evidence into a false completion claim.
+
+The specification remediation re-review subsequently closed all three original findings and approved A-J. The independent code-quality review then returned `CHANGES_REQUIRED` (Critical 0, Important 3, Minor 2). A first quality-remediation attempt paused before modification because `Requirement/PV` and `归属 PV` could have been interpreted as equal ownership sets. Authority clarified that `归属 PV` defines ownership while `Requirement/PV` is the involved superset and may include supporting Requirements; remediation therefore resumed without changing frozen `PLAN.md`. The concrete counterexamples are WP-09 (`WS-012` involved but not owned), WP-16 (`PST-023..024` supporting), WP-26 (supporting-only and no `归属 PV`), WP-28 (`supporting all PVs` but owns only `PV-TST-005`), and WP-29 (supports PRC/all PVs but owns only `PV-DST-001..005`).
+
+At that checkpoint, code quality re-review, final verification, stage, the second commit, CI/cold-start evidence, and WP-01 completion were still pending; the later review outcome and current remaining gates are recorded below. WP-01 final reflection remains `PENDING`.
+
+The first code-quality re-review returned `CHANGES_REQUIRED` (Important 2, Minor 1): a non-pipe line inside an authority table could be mistaken for table termination, and the duplicate-owner mutation claim lacked independently recoverable raw evidence. Fresh remediator `/root/wp01_quality_evidence_remediator` tightened the structural boundary, exercised missing-pipe and wrong-column cases in isolation, and executed the duplicate-owner mutation against a `/tmp` PLAN copy. Final reviewer `/root/wp01_quality_final_rereviewer` then approved the authority-table boundary, malformed-row evidence, duplicate-owner mutation evidence, and CQ-1..CQ-5 with zero findings. Main-agent final verification is `COMPLETED`; stage, second commit, cold-start/final CI evidence, WP-01 completion, and WP-02 remain `PENDING`.
