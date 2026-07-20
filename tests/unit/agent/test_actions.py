@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 import hashlib
 import importlib
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -12,22 +14,34 @@ import pytest
 
 
 BASELINE_COMMIT = "c90f02f30df4ce65328ff397714cc06c4d7b1a27"
-CORRECTION_BASE_COMMIT = "1dae65c1678ab8e31b6e849545d9ef1090048abc"
-CORRECTION_BRANCH = "fix-chinese-process-docs"
+WP02_BASE_COMMIT = "f8165579c44af9dfd5a916748a5e8dee9221290a"
+WP02_BRANCH = "wp-02-structured-action-protocol"
 SPEC_DIGEST = "01a30b5fcfd728bb8c334fdb76173e4d83e2667fc9b97a05672ce773f80e238e"
 PLAN_DIGEST = "571c5b4cbbede66039cb6531b5512ea41a8c187d4a86225331e8d66b2ad6d37f"
-ALLOWED_CORRECTION_PATHS = {
-    "SPEC_PROCESS.md",
-    "AGENT_LOG.md",
-    "REFLECTION.md",
+ALLOWED_WP02_PATHS = {
+    "src/coding_harness/agent/actions.py",
+    "src/coding_harness/agent/results.py",
     "tests/unit/agent/test_actions.py",
 }
-WP01_REQUIREMENTS = (
+WP02_REQUIREMENTS = (
     "GEN-001", "GEN-002", "GEN-003",
     "PRC-001", "PRC-002", "PRC-003", "PRC-004", "PRC-005",
     "PRC-006", "PRC-007", "PRC-008", "PRC-009", "PRC-010",
-    "TST-008",
+    "TST-008", "ACT-001", "ACT-002", "ACT-003", "ACT-008", "ACT-009", "ACT-010", "ACT-011",
 )
+CONTROL_TYPES = ("request_clarification", "propose_plan", "request_budget_extension", "request_user_confirmation", "report_blocked", "stop_with_failure", "stop_without_safe_action")
+_CONTROL_FIELDS = {
+    "request_clarification": "question",
+    "propose_plan": "proposal",
+    "request_budget_extension": "request",
+    "request_user_confirmation": "condition",
+    "report_blocked": "report",
+    "stop_with_failure": "report",
+    "stop_without_safe_action": "report",
+}
+TOOL_TYPES = ("inspect_repository", "list_files", "read_file", "search_text", "create_file", "replace_file", "apply_patch", "delete_file", "request_ignored_input", "run_validation", "git_repo_probe", "git_repo_root", "git_status", "git_diff_worktree", "git_diff_index", "git_list_tracked", "git_list_untracked", "git_stage_paths", "git_unstage_paths")
+GOVERNANCE_TYPES = ("submit_clarification", "approve_plan", "reject_plan", "approve_action", "reject_action", "approve_budget_extension", "reject_budget_extension", "confirm_user_acceptance", "reject_user_acceptance", "continue_task", "cancel_task", "confirm_apply", "reject_apply", "request_recovery")
+INTERNAL_TYPES = ("build_baseline", "materialize_workspace", "materialize_ignored_input", "create_action_approval_request", "compute_changeset", "evaluate_acceptance", "acquire_execution_lease", "release_execution_lease", "begin_apply_transaction", "advance_apply_phase", "recover_apply_transaction", "publish_domain_event")
 
 
 @dataclass(frozen=True)
@@ -374,20 +388,21 @@ def _validate_process_evidence_text(text: str, *, source: str) -> None:
     )
 
 
-def _validate_correction_context(
+def _validate_wp02_context(
     *, branch: str, head: str, staged_paths: set[str], dirty_paths: set[str],
     main_branch: str, main_head: str, main_status: str,
 ) -> None:
-    assert branch == CORRECTION_BRANCH, (
-        f"纠正工作树分支不匹配：期望 {CORRECTION_BRANCH!r}，实际 {branch!r}；HEAD={head}"
+    assert branch == WP02_BRANCH, (
+        f"WP-02工作树分支不匹配：期望 {WP02_BRANCH!r}，实际 {branch!r}；HEAD={head}"
     )
-    assert head, f"纠正工作树 HEAD 为空：branch={branch!r}"
+    assert head, f"WP-02工作树 HEAD 为空：branch={branch!r}"
+    _git("merge-base", "--is-ancestor", WP02_BASE_COMMIT, "HEAD")
     assert not staged_paths, (
-        f"纠正工作树存在 staged 路径：{sorted(staged_paths)}；branch={branch!r}；HEAD={head}"
+        f"WP-02工作树存在 staged 路径：{sorted(staged_paths)}；branch={branch!r}；HEAD={head}"
     )
-    unexpected = sorted(dirty_paths - ALLOWED_CORRECTION_PATHS)
+    unexpected = sorted(dirty_paths - ALLOWED_WP02_PATHS)
     assert not unexpected, (
-        f"纠正工作树存在越界 dirty 路径：{unexpected}；全部 dirty={sorted(dirty_paths)}；"
+        f"WP-02工作树存在越界 dirty 路径：{unexpected}；全部 dirty={sorted(dirty_paths)}；"
         f"branch={branch!r}；HEAD={head}"
     )
     assert main_branch == "main", f"主工作树分支不匹配：实际 {main_branch!r}"
@@ -479,7 +494,6 @@ def test_no_stretch_goal_is_mvp():
 def test_worktree_baseline_is_clean():
     branch = _git("branch", "--show-current")
     head = _git("rev-parse", "HEAD")
-    _git("merge-base", "--is-ancestor", CORRECTION_BASE_COMMIT, "HEAD")
     assert not _git("diff", "--", "SPEC.md", "PLAN.md", ".gitignore")
     assert hashlib.sha256(SPEC.read_bytes()).hexdigest() == SPEC_DIGEST, "SPEC.md 冻结摘要不匹配"
     assert hashlib.sha256(PLAN.read_bytes()).hexdigest() == PLAN_DIGEST, "PLAN.md 冻结摘要不匹配"
@@ -489,7 +503,7 @@ def test_worktree_baseline_is_clean():
     main_branch = _git("branch", "--show-current", cwd=main_root)
     main_head = _git("rev-parse", "HEAD", cwd=main_root)
     main_status = _git("status", "--porcelain=v1", "--untracked-files=all", cwd=main_root)
-    _validate_correction_context(
+    _validate_wp02_context(
         branch=branch,
         head=head,
         staged_paths=staged_paths,
@@ -500,51 +514,15 @@ def test_worktree_baseline_is_clean():
     )
 
 
-def test_action_schema_missing_fails():
-    root_package = importlib.import_module("coding_harness")
-    assert root_package.__name__ == "coding_harness"
-
-    target_module = "coding_harness.agent.actions"
-    expected_missing = {
-        "coding_harness.agent",
-        target_module,
-    }
-
-    try:
-        actions = importlib.import_module(target_module)
-    except ModuleNotFoundError as exc:
-        if exc.name not in expected_missing:
-            raise
-
-        pytest.fail(
-            "parse_action is not implemented by WP-02: "
-            f"required module is missing ({exc.name})",
-            pytrace=False,
-        )
-
-    parse_action = getattr(actions, "parse_action", None)
-    if not callable(parse_action):
-        pytest.fail(
-            "parse_action is not implemented by WP-02: "
-            "coding_harness.agent.actions does not expose callable parse_action",
-            pytrace=False,
-        )
-
-    pytest.fail(
-        "parse_action unexpectedly exists before WP-02 implementation",
-        pytrace=False,
-    )
-
-
-@pytest.mark.parametrize("requirement_id", WP01_REQUIREMENTS, ids=WP01_REQUIREMENTS)
+@pytest.mark.parametrize("requirement_id", WP02_REQUIREMENTS, ids=WP02_REQUIREMENTS)
 def test_spec_requirement(requirement_id: str):
     matches = [row for row in _pv_records() if row.requirement_id == requirement_id]
     assert len(matches) == 1, requirement_id
     row = matches[0]
-    expected_planned = ("DOC",) if requirement_id.startswith("GEN-") else (("DOC", "CI") if requirement_id.startswith("PRC-") else ("UT", "IT", "DT", "AT", "DEMO"))
-    expected_final = ("DOC", "COLD") if requirement_id.startswith("GEN-") else (("DOC", "CI", "process evidence") if requirement_id.startswith("PRC-") else ("CI", "DEMO", "COLD"))
+    expected_planned = ("DOC",) if requirement_id.startswith("GEN-") else (("DOC", "CI") if requirement_id.startswith("PRC-") else (("UT", "IT", "DT", "AT", "DEMO") if requirement_id.startswith("TST-") else ("UT",)))
+    expected_final = ("DOC", "COLD") if requirement_id.startswith("GEN-") else (("DOC", "CI", "process evidence") if requirement_id.startswith("PRC-") else (("CI", "DEMO", "COLD") if requirement_id.startswith("TST-") else ("UT", "IT")))
     assert row.pv_id == f"PV-{requirement_id}"
-    assert (row.phase, row.package, row.day) == (0, "WP-01", 1)
+    assert (row.phase, row.package, row.day) == ((1, "WP-02", 2) if requirement_id.startswith("ACT-") else (0, "WP-01", 1))
     assert row.planned_node == f"tests/unit/agent/test_actions.py::test_spec_requirement[{requirement_id}]"
     assert row.planned_categories == expected_planned
     assert row.supporting_packages == ("WP-28", "WP-29")
@@ -554,3 +532,849 @@ def test_spec_requirement(requirement_id: str):
     assert evidence.is_mvp
     process = (ROOT / "SPEC_PROCESS.md").read_text()
     _validate_process_evidence_text(process, source="SPEC_PROCESS.md")
+    if requirement_id.startswith("ACT-"):
+        _assert_owned_action_requirement(requirement_id)
+
+
+def _load_actions_api():
+    try:
+        module = importlib.import_module("coding_harness.agent.actions")
+    except ModuleNotFoundError as exc:
+        if exc.name in {"coding_harness.agent", "coding_harness.agent.actions"}:
+            pytest.fail(f"WP-02 actions API is missing ({exc.name})", pytrace=False)
+        raise
+    required = ("ActionParseError", "StructuredAction", "ControlAction", "ToolAction", "parse_action")
+    missing = [name for name in required if not hasattr(module, name)]
+    if missing:
+        pytest.fail(f"WP-02 actions API symbols are missing: {missing}", pytrace=False)
+    return module
+
+
+def _load_results_api():
+    try:
+        module = importlib.import_module("coding_harness.agent.results")
+    except ModuleNotFoundError as exc:
+        if exc.name in {"coding_harness.agent", "coding_harness.agent.results"}:
+            pytest.fail(f"WP-02 results API is missing ({exc.name})", pytrace=False)
+        raise
+    missing = [name for name in ("ToolResultStatus", "ToolResult") if not hasattr(module, name)]
+    if missing:
+        pytest.fail(f"WP-02 results API symbols are missing: {missing}", pytrace=False)
+    return module
+
+
+def _action(action_type: str, parameters: object, expected: str | None = None) -> dict[str, object]:
+    return {"action_id": f"action:{action_type}", "action_type": action_type, "parameters": parameters, "budget_impact": {"action_proposals": 1}, "expected_result_type": expected or ("control_result" if action_type in CONTROL_TYPES else "tool_result")}
+
+
+class _MustRejectBeforeSecondItem(Mapping[str, object]):
+    """A Mapping probe proving normalization rejects before traversing later items."""
+
+    def __getitem__(self, key: str) -> object:
+        if key == "oversized":
+            return "x" * 65_536
+        raise AssertionError("normalizer traversed beyond the exhausted byte budget")
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(("oversized", "must_not_be_read"))
+
+    def __len__(self) -> int:
+        return 2
+
+
+class _ExplodingMapping(Mapping[str, object]):
+    def __init__(self, marker: str) -> None:
+        self.marker = marker
+
+    def __getitem__(self, key: str) -> object:
+        raise RuntimeError(self.marker)
+
+    def __iter__(self) -> Iterator[str]:
+        raise RuntimeError(self.marker)
+
+    def __len__(self) -> int:
+        return 1
+
+    def items(self):
+        raise RuntimeError(self.marker)
+
+
+class _EvilStr(str):
+    def __new__(cls, value: str):
+        instance = super().__new__(cls, value)
+        instance.mutable = ["caller-owned"]
+        return instance
+
+    def encode(self, *_args, **_kwargs):
+        return b"x"
+
+    def __str__(self) -> str:
+        return "TOP_SECRET_EVIL_STR_MARKER_41ce"
+
+
+class _EvilInt(int):
+    def __new__(cls, value: int):
+        instance = super().__new__(cls, value)
+        instance.mutable = ["caller-owned"]
+        return instance
+
+    def __str__(self) -> str:
+        return "1"
+
+
+class _SequencedResourceCounts(Mapping[str, int]):
+    def __init__(
+        self,
+        batches: list[list[tuple[str, int]]],
+        *,
+        reported_length: int = 1,
+    ) -> None:
+        self.batches = batches
+        self.reported_length = reported_length
+        self.items_calls = 0
+
+    def __getitem__(self, key: str) -> int:
+        for candidate, value in self.batches[0]:
+            if candidate == key:
+                return value
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(key for key, _ in self.batches[0])
+
+    def __len__(self) -> int:
+        return self.reported_length
+
+    def items(self):
+        batch_index = min(self.items_calls, len(self.batches) - 1)
+        self.items_calls += 1
+        return iter(self.batches[batch_index])
+
+
+def _nested_object(container_depth: int) -> dict[str, object]:
+    assert container_depth >= 1
+    value: dict[str, object] = {"leaf": 1}
+    for _ in range(container_depth - 1):
+        value = {"nested": value}
+    return value
+
+
+def _normalized_size(value: object) -> int:
+    return len(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+
+
+def _action_with_normalized_size(size: int) -> dict[str, object]:
+    raw = _action("create_file", {"path": "src/new.py", "content": ""})
+    remaining = size - _normalized_size(raw)
+    assert remaining >= 0
+    raw["parameters"]["content"] = "x" * remaining
+    assert _normalized_size(raw) == size
+    return raw
+
+
+def _control_parameters(action_type: str) -> dict[str, object]:
+    return {
+        "request_clarification": {
+            "question": "Please clarify the bounded requirement.",
+        },
+        "propose_plan": {
+            "proposal": {
+                "summary": "local proposal",
+                "risks": ["scope change"],
+                "metadata": {"owner": "user", "priority": 1},
+            },
+        },
+        "request_budget_extension": {
+            "request": {
+                "reason": "additional work",
+                "requested": {"tool_calls": 3},
+            },
+        },
+        "request_user_confirmation": {
+            "condition": {
+                "prompt": "Confirm completion",
+                "context": {"source": "user"},
+            },
+        },
+        "report_blocked": {
+            "report": {
+                "summary": "blocked",
+                "details": ["missing input"],
+            },
+        },
+        "stop_with_failure": {
+            "report": {
+                "summary": "validation failed",
+                "details": ["exit status 2"],
+            },
+        },
+        "stop_without_safe_action": {
+            "report": {
+                "summary": "no safe action",
+                "details": ["remaining actions exceed the boundary"],
+            },
+        },
+    }[action_type]
+
+
+def _tool_parameters(action_type: str) -> dict[str, object]:
+    return {"inspect_repository": {}, "list_files": {"path": "src", "limit": 10}, "read_file": {"path": "src/file.py", "start_byte": 0, "max_bytes": 128}, "search_text": {"text": "needle", "paths": ["src"], "limit": 10}, "create_file": {"path": "src/new.py", "content": "x = 1\n"}, "replace_file": {"path": "src/file.py", "expected_digest": "abc", "content": "x = 2\n"}, "apply_patch": {"path": "src/file.py", "patch": {"operations": []}, "expected_digest": "abc"}, "delete_file": {"path": "src/file.py", "expected_digest": "abc", "reason": "requested change"}, "request_ignored_input": {"paths": ["input.txt"], "mode": "read_only_input", "phase": "INVESTIGATING", "manifest_version": "v1"}, "run_validation": {"profile": "python312", "operation": "pytest"}, "git_repo_probe": {}, "git_repo_root": {}, "git_status": {}, "git_diff_worktree": {"paths": ["src/file.py"]}, "git_diff_index": {"paths": ["src/file.py"]}, "git_list_tracked": {"paths": ["src/file.py"]}, "git_list_untracked": {"paths": ["src/file.py"]}, "git_stage_paths": {"paths": ["src/file.py"]}, "git_unstage_paths": {"paths": ["src/file.py"]}}[action_type]
+
+
+def _control_container(action_type: str, container: object) -> dict[str, object]:
+    return {_CONTROL_FIELDS[action_type]: container}
+
+
+def _wire_forms(raw: dict[str, object]) -> tuple[dict[str, object], str]:
+    return raw, json.dumps(raw)
+
+
+def _invalid_control_parameters(action_type: str) -> tuple[dict[str, object], ...]:
+    if action_type == "request_clarification":
+        return ({}, {"question": "One question?", "extra": "not allowed"}, {"question": 7})
+    field = _CONTROL_FIELDS[action_type]
+    return (
+        {},
+        {field: _control_parameters(action_type)[field], "extra": "not allowed"},
+        {field: {}},
+        {field: "not an object"},
+    )
+
+
+def _rejected(api, raw: object) -> None:
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+    error = caught.value
+    assert error.code in {"INVALID_JSON", "INVALID_ACTION", "INVALID_FIELD", "INVALID_VALUE", "INPUT_TOO_LARGE"}
+    assert isinstance(error.field_path, str) and isinstance(error.reason, str) and error.reason
+
+
+def _assert_bounded_safe_rejection(api, raw: object, secret_marker: str) -> None:
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+    error = caught.value
+    assert secret_marker not in error.field_path
+    assert secret_marker not in error.reason
+    assert secret_marker not in str(error)
+    assert len(error.field_path) <= 256
+    assert len(error.reason) <= 256
+    assert len(str(error)) <= 600
+
+
+def _assert_exception_graph_is_safe(error: BaseException, secret_marker: str) -> None:
+    pending: list[BaseException] = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        exposed = (
+            str(current),
+            repr(current),
+            repr(current.args),
+            repr(getattr(current, "doc", None)),
+            repr(getattr(current, "object", None)),
+        )
+        assert all(secret_marker not in value for value in exposed), exposed
+        for linked in (current.__cause__, current.__context__):
+            if linked is not None:
+                pending.append(linked)
+
+
+def _assert_invalid_action_value(api, raw: object, field_path: str) -> None:
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+    assert caught.value.code == "INVALID_VALUE"
+    assert caught.value.field_path == field_path
+    assert caught.value.reason
+
+
+def _assert_owned_action_requirement(requirement_id: str) -> None:
+    actions = _load_actions_api()
+    if requirement_id == "ACT-001":
+        for candidate in _wire_forms(
+            _action(
+                "request_budget_extension",
+                {"request": {"detail": "missing the D.1 required semantics"}},
+            )
+        ):
+            assert actions.parse_action(candidate).to_dict()["parameters"] == {
+                "request": {"detail": "missing the D.1 required semantics"}
+            }
+        for candidate in _wire_forms(
+            _action(
+                "run_validation",
+                {"profile": "anything", "operation": "arbitrary"},
+            )
+        ):
+            _rejected(actions, candidate)
+        non_finite_json = (
+            '{"action_id":"action:propose_plan","action_type":"propose_plan",'
+            '"parameters":{"proposal":{"number":1e999}},'
+            '"budget_impact":{"action_proposals":1},'
+            '"expected_result_type":"control_result"}'
+        )
+        non_finite_mapping = _action("propose_plan", _control_container("propose_plan", {"number": float("inf")}))
+        for raw in (non_finite_json, non_finite_mapping):
+            _assert_invalid_action_value(actions, raw, "$.parameters.proposal.number")
+        for invalid_type in ([], {}):
+            raw = _action("inspect_repository", {}) | {"expected_result_type": invalid_type}
+            _assert_invalid_action_value(actions, raw, "$.expected_result_type")
+        exact_limit = _action_with_normalized_size(65_536)
+        for raw in (exact_limit, json.dumps(exact_limit, ensure_ascii=False, sort_keys=True, separators=(",", ":"))):
+            assert actions.parse_action(raw).to_dict() == exact_limit
+        over_limit = _action_with_normalized_size(65_537)
+        for raw in (over_limit, json.dumps(over_limit, ensure_ascii=False, sort_keys=True, separators=(",", ":"))):
+            _rejected(actions, raw)
+        for raw in (
+            _action("propose_plan", _control_container("propose_plan", {"text": "\ud800"})),
+            json.dumps(_action("propose_plan", _control_container("propose_plan", {"text": "\ud800"}))),
+        ):
+            _assert_invalid_action_value(actions, raw, "$.parameters.proposal.text")
+        secret_marker = "deep-json-input-must-not-leak"
+        deeply_nested_json = "[" * 30_000 + json.dumps(secret_marker) + "]" * 30_000
+        assert len(deeply_nested_json.encode("utf-8")) < 65_536
+        _assert_bounded_safe_rejection(actions, deeply_nested_json, secret_marker)
+        _rejected(actions, _action("unknown_action", {}))
+    elif requirement_id == "ACT-002":
+        raw = _action("inspect_repository", {}) | {
+            "action_id": "stable.action:2",
+            "budget_impact": {"action_proposals": 1, "token_budget": 2},
+        }
+        assert actions.parse_action(raw).to_dict() == raw
+        semantic = _action("request_budget_extension", _control_parameters("request_budget_extension"))
+        assert actions.parse_action(semantic).to_dict()["parameters"] == semantic["parameters"]
+        for action_class in (actions.StructuredAction, actions.ControlAction, actions.ToolAction):
+            with pytest.raises(TypeError):
+                action_class()
+            with pytest.raises(TypeError):
+                action_class(
+                    action_id="action:direct",
+                    action_type="inspect_repository",
+                    parameters={"mutable": []},
+                    budget_impact={"action_proposals": 1},
+                    expected_result_type="tool_result",
+                )
+    elif requirement_id == "ACT-003":
+        _rejected(actions, _action("list_files", {"path": "src", "limit": 1, "command": "ls"}))
+        for raw in (
+            _action("propose_plan", _control_container("propose_plan", {"nested": {"command": "ls"}})),
+            _action("apply_patch", {"path": "src/file.py", "patch": {"nested": {"command": "ls"}}, "expected_digest": "abc"}),
+        ):
+            _rejected(actions, raw)
+        secret_marker = "private-key-material"
+        secret = secret_marker + "-" + "z" * 20_000
+        for raw in (
+            _action("inspect_repository", {}) | {secret: 1},
+            json.dumps({"safe": 1})[:-1] + f',"{secret}":1,"{secret}":2}}',
+            _action("inspect_repository", {}) | {"budget_impact": {secret: 1}},
+        ):
+            _assert_bounded_safe_rejection(actions, raw, secret_marker)
+    elif requirement_id == "ACT-008":
+        results = _load_results_api()
+        result = results.ToolResult(
+            action_id="action:result",
+            status=results.ToolResultStatus.SUCCEEDED,
+            summary="bounded result",
+            output="",
+            resource_counts={"files": 1},
+            truncated=False,
+            error=None,
+        )
+        assert result.to_dict() == {
+            "action_id": "action:result", "status": "SUCCEEDED", "summary": "bounded result",
+            "output": "", "resource_counts": {"files": 1}, "truncated": False, "error": None,
+        }
+        with pytest.raises(ValueError):
+            results.ToolResult(
+                action_id="action:result\0secret",
+                status=results.ToolResultStatus.SUCCEEDED,
+                summary="bounded result",
+                output="",
+                resource_counts={"files": 1},
+                truncated=False,
+                error=None,
+            )
+    elif requirement_id == "ACT-009":
+        control = actions.parse_action(_action("request_clarification", _control_parameters("request_clarification")))
+        tool = actions.parse_action(_action("inspect_repository", {}))
+        assert isinstance(control, actions.ControlAction)
+        assert isinstance(tool, actions.ToolAction)
+        assert isinstance(control, actions.StructuredAction)
+        assert isinstance(tool, actions.StructuredAction)
+        ignored_input = actions.parse_action(
+            _action("request_ignored_input", _tool_parameters("request_ignored_input"))
+        )
+        validation = actions.parse_action(
+            _action("run_validation", {"profile": "nodejs20_npm", "operation": "typecheck"})
+        )
+        assert ignored_input.to_dict()["parameters"]["mode"] == "read_only_input"
+        assert validation.to_dict()["parameters"] == {
+            "profile": "nodejs20_npm",
+            "operation": "typecheck",
+        }
+        for rejected in (
+            _action("request_ignored_input", {"paths": ["input.txt"], "mode": "copy", "phase": "INVESTIGATING", "manifest_version": "v1"}),
+            _action("run_validation", {"profile": "nodejs20_npm", "operation": "pytest"}),
+        ):
+            _rejected(actions, rejected)
+    elif requirement_id == "ACT-010":
+        for action_type in GOVERNANCE_TYPES:
+            with pytest.raises(actions.ActionParseError) as caught:
+                actions.parse_action(_action(action_type, {}))
+            assert (caught.value.code, caught.value.field_path) == ("INVALID_ACTION", "$.action_type")
+    elif requirement_id == "ACT-011":
+        for action_type in INTERNAL_TYPES:
+            with pytest.raises(actions.ActionParseError) as caught:
+                actions.parse_action(_action(action_type, {}))
+            assert (caught.value.code, caught.value.field_path) == ("INVALID_ACTION", "$.action_type")
+    else:
+        raise AssertionError(f"unexpected WP-02 requirement {requirement_id}")
+
+
+@pytest.mark.parametrize("action_type", CONTROL_TYPES, ids=CONTROL_TYPES)
+def test_known_control_action(action_type: str):
+    api = _load_actions_api()
+    raw = _action(action_type, _control_parameters(action_type))
+    parsed = api.parse_action(raw)
+    parsed_json = api.parse_action(json.dumps(raw))
+    snapshot = parsed.to_dict()
+    if action_type == "propose_plan":
+        raw["parameters"]["proposal"]["metadata"]["owner"] = "caller mutation"
+    assert isinstance(parsed, api.ControlAction) and parsed.expected_result_type == "control_result"
+    assert parsed.to_dict() == snapshot
+    assert parsed_json.to_dict() == snapshot
+    if action_type == "request_clarification":
+        exact_utf8 = "界" * 1_365 + "a"
+        assert len(exact_utf8.encode("utf-8")) == 4_096
+        assert api.parse_action(_action(action_type, {"question": exact_utf8})).to_dict()["parameters"]["question"] == exact_utf8
+        for invalid in (exact_utf8 + "b", "question\0tail"):
+            _rejected(api, _action(action_type, {"question": invalid}))
+    else:
+        field = _CONTROL_FIELDS[action_type]
+        for valid in (
+            {f"key_{index}": index for index in range(64)},
+            {"items": list(range(256))},
+            _nested_object(16),
+        ):
+            assert api.parse_action(
+                _action(action_type, _control_container(action_type, valid))
+            ).to_dict()["parameters"][field] == valid
+        for invalid in (
+            {f"key_{index}": index for index in range(65)},
+            {"items": list(range(257))},
+            _nested_object(17),
+        ):
+            _rejected(api, _action(action_type, _control_container(action_type, invalid)))
+    for parameters in _invalid_control_parameters(action_type):
+        for candidate in _wire_forms(_action(action_type, parameters)):
+            _rejected(api, candidate)
+
+
+@pytest.mark.parametrize("action_type", TOOL_TYPES, ids=TOOL_TYPES)
+def test_known_tool_action(action_type: str):
+    api = _load_actions_api()
+    raw = _action(action_type, _tool_parameters(action_type))
+    parsed = api.parse_action(json.dumps(raw))
+    assert isinstance(parsed, api.ToolAction) and parsed.expected_result_type == "tool_result" and parsed.to_dict() == raw
+    assert api.parse_action(raw).to_dict() == raw
+    if action_type == "apply_patch":
+        invalid_values = ("\ud800", "patch\0tail")
+        for invalid in invalid_values:
+            mapping = _action(action_type, {"path": "src/file.py", "patch": {"text": invalid}, "expected_digest": "abc"})
+            for candidate in (mapping, json.dumps(mapping)):
+                _rejected(api, candidate)
+    elif action_type == "git_stage_paths":
+        valid = _action(action_type, {"paths": [f"src/{index}.py" for index in range(256)]})
+        assert len(api.parse_action(valid).to_dict()["parameters"]["paths"]) == 256
+        _rejected(api, _action(action_type, {"paths": [f"src/{index}.py" for index in range(257)]}))
+    elif action_type == "request_ignored_input":
+        for mode in ("read_only_input", "writable_ephemeral"):
+            valid = _action(
+                action_type,
+                {"paths": ["input.txt"], "mode": mode, "phase": "EXECUTING", "manifest_version": "v1"},
+            )
+            for candidate in _wire_forms(valid):
+                assert api.parse_action(candidate).to_dict() == valid
+        invalid_parameters = (
+            {"paths": ["input.txt"], "phase": "INVESTIGATING", "manifest_version": "v1"},
+            {"paths": ["input.txt"], "mode": "read_only_input", "phase": "INVESTIGATING", "manifest_version": "v1", "extra": "not allowed"},
+            {"paths": ["input.txt"], "mode": "copy", "phase": "INVESTIGATING", "manifest_version": "v1"},
+            {"paths": ["input.txt"], "mode": "read_only_input", "phase": "made_up", "manifest_version": "v1"},
+            {"paths": ["input.txt"], "mode": 7, "phase": "INVESTIGATING", "manifest_version": "v1"},
+        )
+        for parameters in invalid_parameters:
+            for candidate in _wire_forms(_action(action_type, parameters)):
+                _rejected(api, candidate)
+    elif action_type == "run_validation":
+        for profile, operation in (
+            ("python312", "pytest"),
+            ("python312", "ruff"),
+            ("nodejs20_npm", "test"),
+            ("nodejs20_npm", "lint"),
+            ("nodejs20_npm", "build"),
+            ("nodejs20_npm", "typecheck"),
+        ):
+            valid = _action(action_type, {"profile": profile, "operation": operation})
+            for candidate in _wire_forms(valid):
+                assert api.parse_action(candidate).to_dict() == valid
+        invalid_parameters = (
+            {"profile": "python312"},
+            {"profile": "python312", "operation": "pytest", "extra": "not allowed"},
+            {"profile": "anything", "operation": "pytest"},
+            {"profile": "python312", "operation": "test"},
+            {"profile": "nodejs20_npm", "operation": "pytest"},
+            {"profile": "python312", "operation": 7},
+        )
+        for parameters in invalid_parameters:
+            for candidate in _wire_forms(_action(action_type, parameters)):
+                _rejected(api, candidate)
+
+
+def test_unknown_action_fails_closed():
+    api = _load_actions_api()
+    cases: list[object] = [_action("made_up_action", {}), _action("inspect_repository", {}) | {"action_type": 7}, {key: value for key, value in _action("inspect_repository", {}).items() if key != "action_type"}, "{not json", '{"action_id":"a","action_id":"b"}', '{"action_id":"a","action_type":"inspect_repository","parameters":{"x":1,"x":2},"budget_impact":{"a":1},"expected_result_type":"tool_result"}', "[]", b"{}", _action("inspect_repository", {"bad": {"x"}}), _action("inspect_repository", {"bad": object()}), _action("inspect_repository", {1: "bad"}), "x" * 65537, _action("propose_plan", {"proposal": _MustRejectBeforeSecondItem()})]
+    for raw in cases:
+        _rejected(api, raw)
+    for raw in (
+        _action("propose_plan", _control_container("propose_plan", {"text": "\ud800"})),
+        json.dumps(_action("propose_plan", _control_container("propose_plan", {"text": "\ud800"}))),
+        _action("propose_plan", _control_container("propose_plan", {"text": "embedded\0nul"})),
+        json.dumps(_action("propose_plan", _control_container("propose_plan", {"text": "embedded\0nul"}))),
+    ):
+        _rejected(api, raw)
+
+
+def test_unknown_field_fails_closed():
+    api = _load_actions_api()
+    cases = [_action("inspect_repository", {}) | {"extra": 1}, _action("inspect_repository", {"extra": 1})]
+    cases += [_action("list_files", {"path": "src", "limit": 1, field: "value"}) for field in ("command", "cmd", "shell", "argv", "git_command", "docker_command", "script")]
+    cases += [_action("propose_plan", _control_container("propose_plan", {"nested": {"command": "value"}})), _action("propose_plan", {"proposal": {}}), _action("propose_plan", _control_container("propose_plan", {"text": "x" * 65537}))]
+    cases += [
+        _action("propose_plan", _control_container("propose_plan", {f"key_{index}": index for index in range(65)})),
+        _action("propose_plan", _control_container("propose_plan", {"items": list(range(257))})),
+        _action("propose_plan", _control_container("propose_plan", _nested_object(17))),
+    ]
+    for raw in cases:
+        _rejected(api, raw)
+    for valid in (
+        {f"key_{index}": index for index in range(64)},
+        {"items": list(range(256))},
+        _nested_object(16),
+    ):
+        assert api.parse_action(_action("propose_plan", _control_container("propose_plan", valid))).to_dict()["parameters"]["proposal"] == valid
+
+    secret_marker = "do-not-leak-this-secret"
+    secret = secret_marker + "-" + "x" * 20_000
+    unknown_top = _action("inspect_repository", {}) | {secret: 1}
+    duplicate_json = json.dumps({"safe": 1})[:-1] + f',"{secret}":1,"{secret}":2}}'
+    invalid_budget = _action("inspect_repository", {}) | {"budget_impact": {secret: 1}}
+    for raw in (unknown_top, duplicate_json, invalid_budget):
+        _assert_bounded_safe_rejection(api, raw, secret_marker)
+
+
+def test_action_identity_and_budget():
+    api = _load_actions_api()
+    parsed = api.parse_action(_action("inspect_repository", {}) | {"action_id": "A.1:_ok-2", "budget_impact": {"zeta": 2, "alpha": 0}})
+    copied = parsed.to_dict(); copied["budget_impact"]["zeta"] = 99
+    assert parsed.to_dict()["budget_impact"] == {"alpha": 0, "zeta": 2}
+    cases = [_action("inspect_repository", {}) | {"action_id": ""}, _action("inspect_repository", {}) | {"action_id": "a" * 129}, _action("inspect_repository", {}) | {"action_id": "é"}, _action("inspect_repository", {}) | {"action_id": "id\0tail"}, _action("inspect_repository", {}) | {"action_id": "_bad"}, _action("inspect_repository", {}) | {"budget_impact": {}}, _action("inspect_repository", {}) | {"budget_impact": {f"k{i}": 1 for i in range(17)}}, _action("inspect_repository", {}) | {"budget_impact": {"Bad": 1}}, _action("inspect_repository", {}) | {"budget_impact": {"cost": -1}}, _action("inspect_repository", {}) | {"budget_impact": {"cost": 2 ** 63}}, _action("inspect_repository", {}) | {"budget_impact": {"cost": True}}, _action("inspect_repository", {}) | {"budget_impact": {"cost": 0}}, _action("inspect_repository", {}, "control_result")]
+    for raw in cases:
+        _rejected(api, raw)
+
+
+def test_required_bounded_tool_result():
+    api = _load_results_api(); Result, Status = api.ToolResult, api.ToolResultStatus
+    base = {"action_id": "action:result", "summary": "bounded result", "output": "", "resource_counts": {"files": 1}, "truncated": False, "error": None}
+    succeeded = Result(status=Status.SUCCEEDED, **base)
+    assert Result(status=Status.TRUNCATED, **(base | {"truncated": True})).status == Status.TRUNCATED
+    assert Result(status=Status.FAILED, **(base | {"error": "failed"})).status == Status.FAILED
+    assert Result(status=Status.DENIED, **(base | {"error": "denied"})).status == Status.DENIED
+    summary_limit = "界" * 1_365 + "a"
+    output_limit = "界" * 21_845 + "a"
+    assert len(summary_limit.encode("utf-8")) == 4_096
+    assert len(output_limit.encode("utf-8")) == 65_536
+    assert Result(status=Status.SUCCEEDED, **(base | {"summary": summary_limit})).summary == summary_limit
+    assert Result(status=Status.SUCCEEDED, **(base | {"output": output_limit})).output == output_limit
+    max_resources = {f"key_{index}": 2**63 - 1 for index in range(16)}
+    assert len(Result(status=Status.SUCCEEDED, **(base | {"resource_counts": max_resources})).resource_counts) == 16
+    assert Result(status=Status.SUCCEEDED, **(base | {"resource_counts": {"k" * 64: 2**63 - 1}})).to_dict()["resource_counts"] == {"k" * 64: 2**63 - 1}
+    cases = [base | {"status": Status.SUCCEEDED, "action_id": ""}, base | {"status": Status.SUCCEEDED, "action_id": "é"}, base | {"status": Status.SUCCEEDED, "action_id": "id\0tail"}, base | {"status": "SUCCEEDED"}, base | {"status": Status.SUCCEEDED, "summary": ""}, base | {"status": Status.SUCCEEDED, "summary": summary_limit + "b"}, base | {"status": Status.SUCCEEDED, "summary": "summary\0tail"}, base | {"status": Status.SUCCEEDED, "output": output_limit + "b"}, base | {"status": Status.SUCCEEDED, "output": "output\0tail"}, base | {"status": Status.SUCCEEDED, "resource_counts": {f"k{i}": i for i in range(17)}}, base | {"status": Status.SUCCEEDED, "resource_counts": {"k" * 65: 1}}, base | {"status": Status.SUCCEEDED, "resource_counts": {"Bad": 1}}, base | {"status": Status.SUCCEEDED, "resource_counts": {"files": -1}}, base | {"status": Status.SUCCEEDED, "resource_counts": {"files": 2**63}}, base | {"status": Status.SUCCEEDED, "resource_counts": {"files": True}}, base | {"status": Status.SUCCEEDED, "truncated": 1}, base | {"status": Status.SUCCEEDED, "error": "no"}, base | {"status": Status.SUCCEEDED, "truncated": True}, base | {"status": Status.TRUNCATED}, base | {"status": Status.TRUNCATED, "truncated": True, "error": "no"}, base | {"status": Status.FAILED}, base | {"status": Status.DENIED}, base | {"status": Status.FAILED, "error": ""}, base | {"status": Status.DENIED, "error": ""}, base | {"status": Status.FAILED, "error": "error\0tail"}, base | {"status": Status.FAILED, "error": summary_limit + "b"}, base | {"status": Status.FAILED, "error": 1}, base | {"status": Status.FAILED, "truncated": True, "error": "failed"}, base | {"status": Status.DENIED, "truncated": True, "error": "denied"}, base | {"status": Status.SUCCEEDED, "extra": 1}]
+    for raw in cases:
+        with pytest.raises((TypeError, ValueError), match="."):
+            Result(**raw)
+    copied = succeeded.to_dict(); copied["resource_counts"]["files"] = 99
+    assert succeeded.to_dict()["resource_counts"] == {"files": 1}
+
+
+def test_quality_q01_json_parse_error_does_not_retain_raw_input():
+    api = _load_actions_api()
+    secret = "TOP_SECRET_JSON_MARKER_9f4a"
+    raw = '{"action_id": "' + secret
+
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+
+    _assert_exception_graph_is_safe(caught.value, secret)
+
+
+def test_quality_q01_mapping_exception_is_safely_converted():
+    api = _load_actions_api()
+    secret = "TOP_SECRET_MAPPING_MARKER_7b2c"
+
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(_ExplodingMapping(secret))
+
+    _assert_exception_graph_is_safe(caught.value, secret)
+
+
+def test_quality_q01_tool_result_mapping_exception_is_safely_converted():
+    api = _load_results_api()
+    secret = "TOP_SECRET_RESULT_MAPPING_MARKER_a81d"
+
+    with pytest.raises(ValueError) as caught:
+        api.ToolResult(
+            action_id="action:result",
+            status=api.ToolResultStatus.SUCCEEDED,
+            summary="bounded result",
+            output="",
+            resource_counts=_ExplodingMapping(secret),
+            truncated=False,
+            error=None,
+        )
+
+    _assert_exception_graph_is_safe(caught.value, secret)
+
+
+def test_quality_q01_unsupported_value_type_name_does_not_leak():
+    api = _load_actions_api()
+    secret = "MAIN_UNIQUE_TYPE_MARKER_c3e17"
+    evil_type = type(secret, (), {})
+    raw = _action(
+        "propose_plan",
+        {"proposal": {"value": evil_type()}},
+    )
+
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+
+    _assert_exception_graph_is_safe(caught.value, secret)
+
+
+def test_quality_q02_action_rejects_scalar_subclasses():
+    api = _load_actions_api()
+    evil_action_id = _EvilStr("action:evil")
+    evil_question = _EvilStr("Please clarify")
+    evil_budget = _EvilInt(1)
+    evil_nested = _EvilStr("nested value")
+    cases = (
+        _action("inspect_repository", {}) | {"action_id": evil_action_id},
+        _action("request_clarification", {"question": evil_question}),
+        _action("inspect_repository", {}) | {"budget_impact": {"action_proposals": evil_budget}},
+        _action("propose_plan", {"proposal": {"nested": evil_nested}}),
+    )
+
+    for raw in cases:
+        with pytest.raises(api.ActionParseError):
+            api.parse_action(raw)
+
+    for value in (evil_action_id, evil_question, evil_budget, evil_nested):
+        value.mutable.append("caller mutation")
+
+
+@pytest.mark.parametrize("field", ("summary", "output"))
+def test_quality_q02_tool_result_rejects_string_subclasses(field: str):
+    api = _load_results_api()
+    evil = _EvilStr("bounded value")
+    values = {
+        "action_id": "action:result",
+        "status": api.ToolResultStatus.SUCCEEDED,
+        "summary": "bounded result",
+        "output": "",
+        "resource_counts": {"files": 1},
+        "truncated": False,
+        "error": None,
+    }
+    values[field] = evil
+
+    with pytest.raises(ValueError):
+        api.ToolResult(**values)
+
+    evil.mutable.append("caller mutation")
+
+
+def test_quality_q02_tool_result_rejects_resource_count_integer_subclass():
+    api = _load_results_api()
+    evil = _EvilInt(1)
+
+    with pytest.raises(ValueError):
+        api.ToolResult(
+            action_id="action:result",
+            status=api.ToolResultStatus.SUCCEEDED,
+            summary="bounded result",
+            output="",
+            resource_counts={"files": evil},
+            truncated=False,
+            error=None,
+        )
+
+    evil.mutable.append("caller mutation")
+
+
+@pytest.mark.parametrize("container_kind", ("control", "patch"))
+@pytest.mark.parametrize(
+    "forbidden_key",
+    ("Command", "COMMAND", "ｃｏｍｍａｎｄ", "ＣＭＤ", "git＿command", "Ｓｃｒｉｐｔ"),
+)
+def test_quality_q03_forbidden_command_keys_are_unicode_normalized(
+    container_kind: str, forbidden_key: str
+):
+    api = _load_actions_api()
+    nested = {"level_one": {"level_two": {forbidden_key: "payload"}}}
+    if container_kind == "control":
+        raw = _action("propose_plan", {"proposal": nested})
+    else:
+        raw = _action(
+            "apply_patch",
+            {"path": "src/file.py", "patch": nested, "expected_digest": "abc"},
+        )
+
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+
+    assert caught.value.code == "INVALID_FIELD"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected_path"),
+    (
+        (
+            _action(
+                "propose_plan",
+                {"proposal": {"metadata": {"ＣＭＤ": "do not execute"}}},
+            ),
+            "$.parameters.proposal.metadata.ＣＭＤ",
+        ),
+        (
+            _action(
+                "apply_patch",
+                {
+                    "path": "src/file.py",
+                    "patch": {"report": {"details": {"git＿command": "example"}}},
+                    "expected_digest": "abc",
+                },
+            ),
+            "$.parameters.patch.report.details.git＿command",
+        ),
+    ),
+)
+def test_quality_q03_unicode_forbidden_field_path_preserves_original_key(
+    raw: dict[str, object], expected_path: str
+):
+    api = _load_actions_api()
+
+    with pytest.raises(api.ActionParseError) as caught:
+        api.parse_action(raw)
+
+    assert caught.value.code == "INVALID_FIELD"
+    assert caught.value.field_path == expected_path
+    assert "<field>" not in caught.value.field_path
+    assert "do not execute" not in str(caught.value)
+    assert "example" not in str(caught.value)
+
+
+def test_quality_q03_command_words_in_string_values_remain_valid():
+    api = _load_actions_api()
+    text_values = (
+        "run this command",
+        "shell documentation",
+        "git command example",
+    )
+    control = _action("propose_plan", {"proposal": {"notes": list(text_values)}})
+    patch = _action(
+        "apply_patch",
+        {
+            "path": "src/file.py",
+            "patch": {"notes": list(text_values)},
+            "expected_digest": "abc",
+        },
+    )
+
+    assert api.parse_action(control).to_dict() == control
+    assert api.parse_action(patch).to_dict() == patch
+
+
+def test_quality_q04_resource_counts_limit_uses_actual_iteration_count():
+    api = _load_results_api()
+    mapping = _SequencedResourceCounts(
+        [[(f"key_{index}", index) for index in range(17)]],
+        reported_length=1,
+    )
+
+    with pytest.raises(ValueError, match="at most 16"):
+        api.ToolResult(
+            action_id="action:result",
+            status=api.ToolResultStatus.SUCCEEDED,
+            summary="bounded result",
+            output="",
+            resource_counts=mapping,
+            truncated=False,
+            error=None,
+        )
+
+    assert mapping.items_calls == 1
+
+
+def test_quality_q04_resource_counts_rejects_duplicate_keys():
+    api = _load_results_api()
+    mapping = _SequencedResourceCounts(
+        [[("files", 1), ("files", 2)]],
+        reported_length=1,
+    )
+
+    with pytest.raises(ValueError, match="duplicate key"):
+        api.ToolResult(
+            action_id="action:result",
+            status=api.ToolResultStatus.SUCCEEDED,
+            summary="bounded result",
+            output="",
+            resource_counts=mapping,
+            truncated=False,
+            error=None,
+        )
+
+
+def test_quality_q04_resource_counts_uses_one_stable_snapshot():
+    api = _load_results_api()
+    mapping = _SequencedResourceCounts(
+        [[("files", 1), ("bytes", 2)], [("changed", 99)]],
+        reported_length=1,
+    )
+    result = api.ToolResult(
+        action_id="action:result",
+        status=api.ToolResultStatus.SUCCEEDED,
+        summary="bounded result",
+        output="",
+        resource_counts=mapping,
+        truncated=False,
+        error=None,
+    )
+
+    mapping.batches[:] = [[("mutated", 1000)]]
+    assert mapping.items_calls == 1
+    assert result.resource_counts == (("bytes", 2), ("files", 1))
+    assert result.to_dict()["resource_counts"] == {"bytes": 2, "files": 1}
+    assert mapping.items_calls == 1
+
+
+@pytest.mark.parametrize("action_type", GOVERNANCE_TYPES, ids=GOVERNANCE_TYPES)
+def test_llm_governance_rejected(action_type: str):
+    _rejected(_load_actions_api(), _action(action_type, {}))
+
+
+@pytest.mark.parametrize("action_type", INTERNAL_TYPES, ids=INTERNAL_TYPES)
+def test_internal_operation_rejected(action_type: str):
+    _rejected(_load_actions_api(), _action(action_type, {}))
