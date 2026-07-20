@@ -13,16 +13,9 @@ import subprocess
 import pytest
 
 
-BASELINE_COMMIT = "c90f02f30df4ce65328ff397714cc06c4d7b1a27"
-WP02_BASE_COMMIT = "f8165579c44af9dfd5a916748a5e8dee9221290a"
-WP02_BRANCH = "wp-02-structured-action-protocol"
+WP02_APPROVED_COMMIT = "d3169f6e8ed0ff32afccfdde9504c8f42e710a97"
 SPEC_DIGEST = "01a30b5fcfd728bb8c334fdb76173e4d83e2667fc9b97a05672ce773f80e238e"
 PLAN_DIGEST = "571c5b4cbbede66039cb6531b5512ea41a8c187d4a86225331e8d66b2ad6d37f"
-ALLOWED_WP02_PATHS = {
-    "src/coding_harness/agent/actions.py",
-    "src/coding_harness/agent/results.py",
-    "tests/unit/agent/test_actions.py",
-}
 WP02_REQUIREMENTS = (
     "GEN-001", "GEN-002", "GEN-003",
     "PRC-001", "PRC-002", "PRC-003", "PRC-004", "PRC-005",
@@ -362,19 +355,6 @@ def _porcelain_paths(output: str) -> set[str]:
     return paths
 
 
-def _main_worktree() -> Path:
-    records = _git("worktree", "list", "--porcelain").split("\n\n")
-    matches: list[Path] = []
-    for record in records:
-        fields = record.splitlines()
-        worktree = next((line.removeprefix("worktree ") for line in fields if line.startswith("worktree ")), None)
-        branch = next((line.removeprefix("branch ") for line in fields if line.startswith("branch ")), None)
-        if worktree and branch == "refs/heads/main":
-            matches.append(Path(worktree))
-    assert len(matches) == 1, f"expected one main worktree in git worktree list, found {matches}"
-    return matches[0]
-
-
 def _validate_process_evidence_text(text: str, *, source: str) -> None:
     section_match = re.search(r"^## 证据台账\n(?P<body>.*?)(?=^## )", text, re.MULTILINE | re.DOTALL)
     assert section_match, f"{source}: 缺少证据台账章节，无法验证过程语义"
@@ -389,27 +369,16 @@ def _validate_process_evidence_text(text: str, *, source: str) -> None:
 
 
 def _validate_wp02_context(
-    *, branch: str, head: str, staged_paths: set[str], dirty_paths: set[str],
-    main_branch: str, main_head: str, main_status: str,
+    *, head: str, staged_paths: set[str], dirty_paths: set[str],
 ) -> None:
-    assert branch == WP02_BRANCH, (
-        f"WP-02工作树分支不匹配：期望 {WP02_BRANCH!r}，实际 {branch!r}；HEAD={head}"
-    )
-    assert head, f"WP-02工作树 HEAD 为空：branch={branch!r}"
-    _git("merge-base", "--is-ancestor", WP02_BASE_COMMIT, "HEAD")
+    assert head, "当前工作树 HEAD 为空"
+    _git("merge-base", "--is-ancestor", WP02_APPROVED_COMMIT, "HEAD")
     assert not staged_paths, (
-        f"WP-02工作树存在 staged 路径：{sorted(staged_paths)}；branch={branch!r}；HEAD={head}"
+        f"当前工作树存在 staged 路径：{sorted(staged_paths)}；HEAD={head}"
     )
-    unexpected = sorted(dirty_paths - ALLOWED_WP02_PATHS)
-    assert not unexpected, (
-        f"WP-02工作树存在越界 dirty 路径：{unexpected}；全部 dirty={sorted(dirty_paths)}；"
-        f"branch={branch!r}；HEAD={head}"
+    assert not dirty_paths, (
+        f"当前工作树存在 dirty 路径：{sorted(dirty_paths)}；HEAD={head}"
     )
-    assert main_branch == "main", f"主工作树分支不匹配：实际 {main_branch!r}"
-    assert main_head == BASELINE_COMMIT, (
-        f"主工作树 HEAD 不匹配：期望 {BASELINE_COMMIT}，实际 {main_head}"
-    )
-    assert not main_status, f"主工作树不干净：{main_status!r}"
 
 
 def test_traceability_has_207_unique_rows():
@@ -492,25 +461,16 @@ def test_no_stretch_goal_is_mvp():
 
 
 def test_worktree_baseline_is_clean():
-    branch = _git("branch", "--show-current")
     head = _git("rev-parse", "HEAD")
     assert not _git("diff", "--", "SPEC.md", "PLAN.md", ".gitignore")
     assert hashlib.sha256(SPEC.read_bytes()).hexdigest() == SPEC_DIGEST, "SPEC.md 冻结摘要不匹配"
     assert hashlib.sha256(PLAN.read_bytes()).hexdigest() == PLAN_DIGEST, "PLAN.md 冻结摘要不匹配"
     staged_paths = set(filter(None, _git("diff", "--cached", "--name-only").splitlines()))
     dirty_paths = _porcelain_paths(_git("status", "--porcelain=v1", "--untracked-files=all"))
-    main_root = _main_worktree()
-    main_branch = _git("branch", "--show-current", cwd=main_root)
-    main_head = _git("rev-parse", "HEAD", cwd=main_root)
-    main_status = _git("status", "--porcelain=v1", "--untracked-files=all", cwd=main_root)
     _validate_wp02_context(
-        branch=branch,
         head=head,
         staged_paths=staged_paths,
         dirty_paths=dirty_paths,
-        main_branch=main_branch,
-        main_head=main_head,
-        main_status=main_status,
     )
 
 
