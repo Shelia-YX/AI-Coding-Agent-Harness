@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 import json
 
-from coding_harness.agent.actions import ToolAction
+from coding_harness.agent.actions import ToolAction, parse_action
 from coding_harness.agent.results import ToolResult, ToolResultStatus
 
 
@@ -46,6 +46,22 @@ class ContextAttempt:
             "action": self.action.to_dict(),
             "result": self.result.to_dict(),
         }
+
+
+def _snapshot_attempt(value: ContextAttempt) -> ContextAttempt:
+    action = parse_action(value.action.to_dict())
+    if type(action) is not ToolAction:
+        raise ValueError("history action must be a ToolAction")
+    result = ToolResult(
+        action_id=value.result.action_id,
+        status=value.result.status,
+        summary=value.result.summary,
+        output=value.result.output,
+        resource_counts=dict(value.result.resource_counts),
+        truncated=value.result.truncated,
+        error=value.result.error,
+    )
+    return ContextAttempt(action=action, result=result)
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -103,10 +119,13 @@ class ContextBuilder:
     ) -> BuiltContext:
         if type(task) is not str or not task or "\0" in task:
             raise ValueError("task must be non-empty UTF-8 text without NUL")
+        task_encoding_failed = False
         try:
             task.encode("utf-8")
         except UnicodeEncodeError:
-            raise ValueError("task must be non-empty UTF-8 text without NUL") from None
+            task_encoding_failed = True
+        if task_encoding_failed:
+            raise ValueError("task must be non-empty UTF-8 text without NUL")
         if type(max_bytes) is not int or max_bytes <= 0:
             raise ValueError("max_bytes must be a positive integer")
 
@@ -122,11 +141,14 @@ class ContextBuilder:
             raise ValueError("history items must be ContextAttempt instances")
 
         conversion_failed = False
+        canonical_attempts: list[ContextAttempt] = []
         attempt_payloads: list[dict[str, object]] = []
         encoded_attempts: list[bytes] = []
         try:
             for attempt in snapshot:
-                payload = attempt.to_dict()
+                canonical_attempt = _snapshot_attempt(attempt)
+                payload = canonical_attempt.to_dict()
+                canonical_attempts.append(canonical_attempt)
                 attempt_payloads.append(payload)
                 encoded_attempts.append(_encode_payload(payload))
         except Exception:
@@ -168,7 +190,7 @@ class ContextBuilder:
             selected_encoded_bytes = candidate_attempt_bytes
             truncated = candidate_truncated
 
-        selected = snapshot[selected_start:]
+        selected = tuple(canonical_attempts[selected_start:])
         selected_payloads = attempt_payloads[selected_start:]
         payload = {
             "task": task,
