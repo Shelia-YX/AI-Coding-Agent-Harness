@@ -879,6 +879,36 @@ def test_policy_authority_rejects_digest_mismatch(digest_field: str) -> None:
     assert result.side_effect_permitted is False
 
 
+def test_policy_record_identity_mismatch_fails_closed() -> None:
+    approvals, _, governance, models, enums, policy, _ = _load_wp07_api()
+    approval = _approval(approvals, models, enums, policy)
+    trusted_record = _trusted_policy_for(approval, policy)
+    mismatched_identity = "policy-record:different"
+
+    creation = _validate(
+        governance.ApprovalService(),
+        approval,
+        policy,
+        trusted_policy_record=trusted_record,
+        trusted_policy_record_identity=mismatched_identity,
+    )
+    assert creation.permitted is False
+    assert creation.side_effect_permitted is False
+    assert creation.reason == "APPROVAL_REJECTED"
+
+    consumption = _consume(
+        governance.ApprovalService(),
+        approval,
+        trusted_policy_record=trusted_record,
+        trusted_policy_record_identity=mismatched_identity,
+    )
+    assert consumption.permitted is False
+    assert consumption.conflict is True
+    assert consumption.side_effect_permitted is False
+    assert consumption.reason == "APPROVAL_CONFLICT"
+    assert consumption.approval is approval
+
+
 def _budget_approval(approvals, budgets, models, enums, policy):
     return _approval(
         approvals,
