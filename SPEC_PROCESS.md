@@ -44,3 +44,149 @@
 - WP-01 完成状态：`PENDING`。
 - 首次代码质量复审返回 `CHANGES_REQUIRED`（Important 2、Minor 1）；权威表边界整改和隔离 mutation 证据已记录于 `AGENT_LOG.md`。整改后 reviewer `/root/wp01_quality_final_rereviewer` 返回 `APPROVED`，全部检查通过。
 - 中文文档合规整改已删除英文叙述模板，并将测试契约改为验证稳定的中文过程语义及显式批准的纠正工作树上下文；本次审查、stage 与 commit 仍为 `PENDING`。
+
+## WP-02..08 追溯审计重建
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**
+
+- 实际补录时间：`2026-07-22 13:52:55 +0800 (Asia/Shanghai)`。
+- 同期记录：`SPEC_PROCESS.md` 与 `AGENT_LOG.md` 均没有 WP-02..08 的完整同期记录；WP-01 日志中的 WP-02 前置 Red 片段不构成 WP-02..08 的完整过程台账。本节是事后重建，不是同期时间线。【VERIFIED】
+- 证据分级：仓库可直接证明或本次实际重新执行的事实为 `VERIFIED`；仅见于先前执行报告的事实为 `USER_REPORTED`；无法由保留证据恢复的事实为 `UNKNOWN`。
+- 当前仓库依据：WP-02 的 implementation/remediation 两个 commit 及 WP-03..08 六个 commit、父链、author/commit time、branch containment、diff/stat、当前文件和测试节点、本次测试输出、当前 Git 状态及冻结摘要。【VERIFIED】
+- 历史执行依据：先前会话中的 Red/Green、定向回归、finding、dirty/staged 与 baseline-clean 摘要没有作为原始机器输出保存在仓库中。【USER_REPORTED】
+- 不可恢复依据：原始命令的精确执行时间、原 reviewer 身份、未保存的完整终端输出、未保存的临时报告内容，以及 commit 创建时的物理 worktree。【UNKNOWN】
+
+### 统一过程偏差与审计缺口
+
+| ID | 类型 | 记录 | 证据级别 | 处置 |
+|---|---|---|---|---|
+| `PROC-DEV-001` | process deviation / naming and housekeeping | WP-05..08 被报告为在 `wp-04-agent-loop-stopping` branch/worktree 中连续完成；Git 直接证明四个独立 commit 在该分支形成完整线性历史，且当前该分支绑定同名 linked worktree。SPEC/PLAN 未要求一 WP 一 worktree，因此这不是 Git 完整性失败；Git 不记录 commit 创建时的物理 worktree，该部分保持 `UNKNOWN`。 | 分支、commit 和当前 worktree 映射【VERIFIED】；历史物理 worktree 复用【USER_REPORTED】；创建时物理位置【UNKNOWN】 | 不改写 Git 历史。后续 WP 开始前必须明确记录 branch/worktree ownership。 |
+| `AUDIT-GAP-001` | audit gap | `SPEC_PROCESS.md` 与 `AGENT_LOG.md` 未完整同期记录 WP-02..08。本节只追溯重建可证明事实；用户报告不冒充机器证据，不可恢复字段保持 `UNKNOWN`。 | 缺少完整同期条目【VERIFIED】；历史摘要【USER_REPORTED】；未保存原始证据【UNKNOWN】 | 追加本节及对应 Agent Log 聚合记录；不覆盖 WP-01 历史。 |
+
+### 本次当前重新验证
+
+这些结果发生于追溯重建期间，不是 WP-02..08 的历史同期结果。
+
+| 证据 ID | 精确命令或制品 | 观察结果 | 证据级别 |
+|---|---|---|---|
+| `RETRO-CURRENT-TARGETED-001` | WP-05..08 四个 domain test 文件及 Agent Core 两个定向文件 | `224 passed`；未修改 production/test。 | 【VERIFIED】 |
+| `RETRO-CURRENT-BASELINE-001` | `tests/unit/agent/test_actions.py::test_worktree_baseline_is_clean`，完整回归前 | `1 passed`；无项目内 cache/bytecode，Git clean。 | 【VERIFIED】 |
+| `RETRO-CURRENT-FULL-001` | `PYTHONDONTWRITEBYTECODE=1 ... pytest -p no:cacheprovider -q` | `331 passed`，`0 failed`，`0 errors`，无 skipped/xfailed；无项目内 cache/bytecode。 | 【VERIFIED】 |
+| `RETRO-CURRENT-BASELINE-002` | 同一 baseline-clean node，完整回归后 | `1 passed`；Git clean、staged 为空。 | 【VERIFIED】 |
+| `RETRO-CURRENT-AGENT-FUNCTIONAL-002` | 当前 `test_actions.py`、`test_mock_feedback.py`、`test_loop.py` | WP-02..04 functional/directed nodes 为 `133 passed`。【VERIFIED】全局 cleanliness sentinel 因两份获批审计文档处于预期 dirty 而被用户裁决为本编辑阶段 `NOT_APPLICABLE`，不是产品回归失败。【USER_REPORTED】 |
+| `RETRO-CURRENT-SCOPED-CLEAN-001` | `git status`、tracked diff allowlist、`git diff --quiet -- src tests SPEC.md PLAN.md`、staged 与 cache 检查 | dirty 精确为 `SPEC_PROCESS.md`、`AGENT_LOG.md`；staged 为空；production/test/SPEC/PLAN 无 diff；无 cache/bytecode。【VERIFIED】用户裁决本阶段以此替代全局 cleanliness sentinel，审计 commit 后必须重跑全局 baseline-clean。【USER_REPORTED】 |
+
+### WP-02：Structured Action 协议
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；实际补录时间 `2026-07-22 14:26:39 +0800 (Asia/Shanghai)`。引用统一缺口 `AUDIT-GAP-001`；`PROC-DEV-001` 仅作为后续分支复用背景，不归因于 WP-02。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| contemporaneous record / evidence basis | WP-01 日志保留了 WP-02 action API 尚不存在的前置 Red 片段，但没有 WP-02 完整同期实现、评审和关闭台账。当前 Git、PLAN、实现、测试节点及本轮 scoped gate 是直接依据。 | 现有文件与 Git【VERIFIED】；历史执行摘要【USER_REPORTED】；缺失材料【UNKNOWN】 |
+| Requirement/PV | `ACT-001..003`、`ACT-008..011`；`PV-ACT-001..003`、`PV-ACT-008..011`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/agent/actions.py`、`results.py`、`tests/unit/agent/test_actions.py`。 | 【VERIFIED】 |
+| implementation commit | `d3169f6e8ed0ff32afccfdde9504c8f42e710a97`，parent `f8165579c44af9dfd5a916748a5e8dee9221290a`；author/commit time `2026-07-20 17:57:21 +0800`；3 files、1729 insertions、57 deletions；当前分支可达。 | 【VERIFIED】 |
+| follow-up test remediation | `7cbdcf82f8d6bfde8ee9b5584c16142df6d2402f`，parent `d3169f6e8ed0ff32afccfdde9504c8f42e710a97`；author/commit time `2026-07-20 19:03:12 +0800`；仅修改 owned test `test_actions.py`，7 insertions、47 deletions；当前分支可达。 | 【VERIFIED】 |
+| 当前 re-verification | `RETRO-CURRENT-AGENT-FUNCTIONAL-002` 中 WP-02 functional nodes 通过，补录前全局 baseline-clean 已由 `RETRO-CURRENT-BASELINE-001/002` 验证。【VERIFIED】用户裁决 cleanliness sentinel 在获批文档编辑阶段为 `NOT_APPLICABLE`，使用 `RETRO-CURRENT-SCOPED-CLEAN-001`。【USER_REPORTED】 | 【VERIFIED】/【USER_REPORTED】 |
+| 历史执行 | WP-01 日志及先前对话报告了 action schema 的合法前置 Red；先前报告的 WP-02 当前集合结果为 `107 collected`、`107 passed`，并报告最终 staged/clean 边界已满足。 | 【USER_REPORTED】 |
+| review/remediation | Git 证明后续 baseline portability test remediation commit 存在；其历史批准理由、详细 finding、两阶段评审结果及 reviewer 身份没有完整同期仓库证据。 | commit【VERIFIED】；历史过程【USER_REPORTED】；reviewer identity【UNKNOWN】 |
+| 未保存证据 | WP-02 实施期 Red/Green 完整输出、精确执行时间、reviewer 原文/身份、未保存 review markdown、临时报告及 commit 创建时的物理 worktree。 | 【UNKNOWN】 |
+| completion / confidence | 技术关闭结论保持；owned PV 为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。置信度 mixed。 | Git/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-03：Mock LLM、Context 与反馈
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；实际补录时间 `2026-07-22 14:26:39 +0800 (Asia/Shanghai)`。引用统一缺口 `AUDIT-GAP-001`；`PROC-DEV-001` 仅作为后续分支复用背景，不归因于 WP-03。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| contemporaneous record / evidence basis | 两份过程文件没有 WP-03 完整同期记录；当前 Git、PLAN、实现、测试节点及本轮 scoped gate 是直接依据。 | 当前仓库【VERIFIED】；历史摘要【USER_REPORTED】；缺失材料【UNKNOWN】 |
+| Requirement/PV | `AGT-007`、`AGT-009`、`AGT-012`、`AGT-015`；对应 `PV-AGT-007`、`PV-AGT-009`、`PV-AGT-012`、`PV-AGT-015`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/agent/adapters.py`、`mock_llm.py`、`context.py`、`tests/unit/agent/test_mock_feedback.py`。 | 【VERIFIED】 |
+| commit | `4672b013bdd8f0286cf65f56eb2eb767a40a3b27`，parent `7cbdcf82f8d6bfde8ee9b5584c16142df6d2402f`；author/commit time `2026-07-21 13:06:05 +0800`；4 files、879 insertions；当前分支可达。 | 【VERIFIED】 |
+| 当前 re-verification | `RETRO-CURRENT-AGENT-FUNCTIONAL-002` 中 WP-03 functional nodes 通过；当前阶段 cleanliness 使用 `RETRO-CURRENT-SCOPED-CLEAN-001`。 | 【VERIFIED】 |
+| 历史执行 | 先前对话报告 WP-03 定向结果为 `11 passed`；规格审查和代码质量审查均曾要求整改，整改与复审后获批进入 commit/integration。 | 【USER_REPORTED】 |
+| review/remediation | 历史对话证明层级仅支持“发生过 finding、整改和复审”的摘要；具体 finding 文本、数量、原 reviewer 身份和原始报告位置没有仓库证据，不从 WP-04/05 数字推断。 | 摘要【USER_REPORTED】；reviewer identity/细节【UNKNOWN】 |
+| 未保存证据 | WP-03 实施期 Red/Green 完整输出、精确执行时间、finding 原文、reviewer 身份、未保存 markdown 报告、临时报告及 commit 创建时的物理 worktree。 | 【UNKNOWN】 |
+| completion / confidence | 技术关闭结论保持；owned PV 为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。置信度 mixed。 | Git/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-04：Agent Loop 与确定性停止器
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；实际补录时间 `2026-07-22 14:26:39 +0800 (Asia/Shanghai)`。引用统一缺口 `AUDIT-GAP-001`；`PROC-DEV-001` 描述该 WP 的 branch/worktree 后续被 WP-05..08 复用，不把偏差归因于 WP-04 自身。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| contemporaneous record / evidence basis | 两份过程文件没有 WP-04 完整同期记录；当前 Git、PLAN、实现、测试节点及本轮 scoped gate 是直接依据。 | 当前仓库【VERIFIED】；历史摘要【USER_REPORTED】；缺失材料【UNKNOWN】 |
+| Requirement/PV | `AGT-001..002`、`AGT-006`、`AGT-008`、`AGT-010..011`、`TST-001`；对应 `PV-AGT-001`、`PV-AGT-002`、`PV-AGT-006`、`PV-AGT-008`、`PV-AGT-010`、`PV-AGT-011`、`PV-TST-001`。 | 【VERIFIED】 |
+| PLAN owned files 与实际 scope | PLAN 列出 `agent/loop.py`、`agent/stopping.py`、`src/coding_harness/ports.py`、`test_loop.py`；commit 实际包含 `agent/loop.py`、`agent/stopping.py`、`agent/ports.py`、`test_loop.py`，并包含 WP-03 owned `agent/context.py`。文件路径与 diff 是当前仓库事实。 | 【VERIFIED】 |
+| commit | `6fdc89c626505af403e2c066f815315a1324c88f`，parent `4672b013bdd8f0286cf65f56eb2eb767a40a3b27`；author/commit time `2026-07-21 16:12:36 +0800`；5 files、1950 insertions、4 deletions；当前分支可达。 | 【VERIFIED】 |
+| WP-03 limited remediation | `context.py` 属于 WP-03 owned file；它在 WP-04 commit 中的 30-line-scale modification 可由 diff 证明。先前对话明确批准该有限 code-quality remediation，因此不记录为未授权范围漂移；批准过程本身未同期写入仓库。 | diff【VERIFIED】；历史批准【USER_REPORTED】 |
+| 当前 re-verification | `RETRO-CURRENT-AGENT-FUNCTIONAL-002` 中 WP-04 functional nodes 通过；当前阶段 cleanliness 使用 `RETRO-CURRENT-SCOPED-CLEAN-001`。 | 【VERIFIED】 |
+| 历史执行 | 先前报告最终定向为 `27 passed`、完整回归 `134 passed`、baseline-clean `1 passed`；历史 staged paths 为五个获批文件、最终 worktree clean、冻结摘要未变。 | 【USER_REPORTED】 |
+| review/remediation | 初始 review 报告 port boundary canonical snapshot、investigation path lexical gate、sensitive exception chain 三项 Important；后续复查发现 `BuiltContext.attempts` 与 canonical history alias。报告称整改后 ContextBuilder 重建 public-contract snapshots，AgentLoop 为 Store/LLM 构造独立上下文，canonical history、Store、LLM 与 final outcome 不共享 attempt tree；最终报告 Critical 0、Important 0、Related Minor 0。 | 【USER_REPORTED】 |
+| reviewer identity | 原 reviewer 的真实身份与原始报告位置没有仓库证据。 | 【UNKNOWN】 |
+| 未保存证据 | WP-04 实施期 Red/Green 完整输出、精确执行时间、reviewer 原文/身份、未保存 markdown 报告、临时报告及 commit 创建时的物理 worktree。 | 【UNKNOWN】 |
+| completion / confidence | 技术关闭结论保持；owned PV 为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。置信度 mixed。 | Git/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-05：Task State 与不可变版本
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；引用统一偏差 `PROC-DEV-001` 与缺口 `AUDIT-GAP-001`。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| Requirement/PV | `AGT-003..005`、`TXN-001..004`、`PST-004..006`；`PV-AGT-003..005`、`PV-TXN-001..004`、`PV-PST-004..006`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/domain/enums.py`、`models.py`、`state_machine.py`、`tests/unit/domain/test_state_machine.py`。 | 【VERIFIED】 |
+| commit | `b489b942d5d5a702bd48b22d5c0107131b42b730`，parent `6fdc89c626505af403e2c066f815315a1324c88f`；author/commit time `2026-07-22 11:23:23 +0800`；4 files、1523 insertions；当前分支可达。 | 【VERIFIED】 |
+| 当前验证 | 本次 `RETRO-CURRENT-TARGETED-001` 与 `RETRO-CURRENT-FULL-001` 覆盖当前 WP-05 节点。 | 【VERIFIED】 |
+| 历史执行 | 合法 Red 报告为 19 failed；整改后 WP-05 报告为 19 passed，Agent Core 定向报告为 27 passed，commit-prep 时 staged 为空且冻结摘要未变。 | 【USER_REPORTED】 |
+| review/remediation | 报告曾发现取消、阻塞、不可恢复失败 guard 及 `RECOVERY_REQUIRED` 重复事件边界问题；整改后报告为 `WP05_BOUNDARY_GREEN_READY`，Critical/Important 边界问题关闭。 | 【USER_REPORTED】 |
+| reviewer identity | 原 reviewer 的真实身份没有仓库证据。 | 【UNKNOWN】 |
+| 未保存证据 | 原始 Red/Green 输出、逐次 reviewer 报告、精确执行时间和临时报告内容未保存在仓库。 | 【UNKNOWN】 |
+| completion | 技术关闭结论保持；owned PV 状态记录为 `IMPLEMENTED`，在 WP-28/WP-29 supporting verification 完成前不提升为 `VERIFIED`。证据置信度为 mixed。 | commit/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-06：Policy Engine 与硬边界
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；引用统一偏差 `PROC-DEV-001` 与缺口 `AUDIT-GAP-001`。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| Requirement/PV | `POL-001..007`；`PV-POL-001..007`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/domain/policy.py`、`errors.py`、`tests/unit/domain/test_policy.py`。 | 【VERIFIED】 |
+| commit | `72eaef67e25e390a36150135f20bb75d70afae01`，parent `b489b942d5d5a702bd48b22d5c0107131b42b730`；author/commit time `2026-07-22 11:54:50 +0800`；3 files、696 insertions；当前分支可达。 | 【VERIFIED】 |
+| 当前验证 | 本次 `RETRO-CURRENT-TARGETED-001` 与 `RETRO-CURRENT-FULL-001` 覆盖当前 WP-06 节点。 | 【VERIFIED】 |
+| 历史执行 | 合法 Red 报告为 16 failed；初始 Green 报告为 16 passed；安全整改后 WP-06 报告为 44 passed，WP-05 与 Agent Core 合并回归报告为 46 passed。 | 【USER_REPORTED】 |
+| review/remediation | 定向 specification review 报告 Critical 0、Important 2、Minor 0；异常 fail-closed 边界和安全不变量测试覆盖完成整改，复审报告 Critical 0、Important 0、Related Minor 0。 | 【USER_REPORTED】 |
+| reviewer identity | 原 reviewer 的真实身份没有仓库证据。 | 【UNKNOWN】 |
+| 未保存证据 | 原始 Red/Green 输出、reviewer 原文、精确执行时间和临时报告内容未保存在仓库。 | 【UNKNOWN】 |
+| completion | 技术关闭结论保持；owned PV 状态记录为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。证据置信度为 mixed。 | commit/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-07：Approval 与 Budget Governance
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；引用统一偏差 `PROC-DEV-001` 与缺口 `AUDIT-GAP-001`。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| Requirement/PV | `POL-008..024`、`ACT-012`；`PV-POL-008..024`、`PV-ACT-012`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/domain/approvals.py`、`budgets.py`、`src/coding_harness/application/governance.py`、`tests/unit/domain/test_governance.py`。 | 【VERIFIED】 |
+| commit | `74025acf5bb063ec20bcda297bd74ea1cb4ccd8f`，parent `72eaef67e25e390a36150135f20bb75d70afae01`；author/commit time `2026-07-22 12:49:41 +0800`；4 files、2218 insertions；当前分支可达。 | 【VERIFIED】 |
+| 当前验证 | 本次 `RETRO-CURRENT-TARGETED-001` 与 `RETRO-CURRENT-FULL-001` 覆盖当前 WP-07 节点；独立 `test_policy_record_identity_mismatch_fails_closed` 当前存在。 | 【VERIFIED】 |
+| 历史执行 | 合法 Red 报告为 43 failed；授权权威和绑定整改后 WP-07 报告为 90 passed，前序回归报告为 90 passed；commit-prep 时 staged 为空且摘要未变。 | 【USER_REPORTED】 |
+| review/remediation | specification review 报告 `C-1`、`C-2`、`I-1`；Policy 权威、类型专属绑定及纯领域 CAS intent 整改后复审报告 Critical 0、Important 0、Related Minor 1。该 Minor 后续报告为由 WP-08 commit 中新增的独立 identity-mismatch node 关闭，未修改 WP-07 production。不得据此声称已实现 persistence 原子 CAS。 | 【USER_REPORTED】 |
+| reviewer identity | 原 reviewer 的真实身份没有仓库证据。 | 【UNKNOWN】 |
+| 未保存证据 | 原始 Red/Green 输出、reviewer 原文、只读对抗探针输出、精确执行时间和临时报告内容未保存在仓库。 | 【UNKNOWN】 |
+| completion | 技术关闭结论保持；owned PV 状态记录为 `IMPLEMENTED`，真正 only-one-commit 原子性仍属于后续 persistence CAS；在 supporting verification 完成前不提升为 `VERIFIED`。证据置信度为 mixed。 | commit/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+### WP-08：Acceptance Contract
+
+**RETROSPECTIVE AUDIT RECONSTRUCTION**；引用统一偏差 `PROC-DEV-001` 与缺口 `AUDIT-GAP-001`。
+
+| 字段 | 补录内容 | 证据级别 |
+|---|---|---|
+| Requirement/PV | `ACC-001..007`；`PV-ACC-001..007`。 | 【VERIFIED】 |
+| owned files | `src/coding_harness/domain/acceptance.py`、`tests/unit/domain/test_acceptance.py`；另在 `tests/unit/domain/test_governance.py` 增加已批准的 WP-07 deferred Minor 回归 node。 | 【VERIFIED】 |
+| commit | `a5805a103d0fb4ba26995ab1fc910d4d1d8b051e`，parent `74025acf5bb063ec20bcda297bd74ea1cb4ccd8f`；author/commit time `2026-07-22 13:32:40 +0800`；3 files、1443 insertions；当前 HEAD。 | 【VERIFIED】 |
+| 当前验证 | 本次 `RETRO-CURRENT-TARGETED-001` 与 `RETRO-CURRENT-FULL-001` 覆盖当前 WP-08 节点；两次 baseline-clean 均通过。 | 【VERIFIED】 |
+| 历史执行 | 合法 Red 报告为 41 failed；初始 Green 报告为 41 passed；重新审批整改后报告为 43 passed，前序回归报告为 181 passed；commit 后完整回归报告为 331 passed、baseline-clean 1 passed。 | 【USER_REPORTED】 |
+| review/remediation | WP-05+WP-08 ordinary group review 报告 WP-08 Important 1、WP-07 deferred Minor 1；新 ContractVersion 重新审批语义和独立 Policy identity mismatch node 完成整改；复审报告 Critical 0、Important 0、Minor 0。 | 【USER_REPORTED】 |
+| reviewer identity | 原 reviewer 的真实身份没有仓库证据。 | 【UNKNOWN】 |
+| 未保存证据 | 原始 Red/Green 输出、reviewer 原文、精确执行时间和临时报告内容未保存在仓库。 | 【UNKNOWN】 |
+| completion | 技术关闭结论保持；owned PV 状态记录为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。证据置信度为 mixed。 | commit/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
