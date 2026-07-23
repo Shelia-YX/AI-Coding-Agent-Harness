@@ -253,3 +253,50 @@
 | 第二轮安全整改 cleanup 合同补强 | `2026-07-23 11:53:09 +0800 (Asia/Shanghai)`：最终源码复核发现 stream close 与 terminate 异常尚缺独立回归节点；先新增两个精确节点并观察 `2 failed / 0 errors`，分别证明 terminate 异常未进入稳定 cleanup reason、统一 stream-close 合同尚不存在。最小整改后所有 process cleanup 异常均以固定 reason 记录，仍执行 kill/final wait 并报告是否 reaped；stream close 失败统一返回 `GIT_STREAM_CLOSE_FAILURE`，不包含原异常文本。第二轮最终共新增 `37` 个 `security_fix2` 节点，fix2 为 `37 passed / 105 deselected`，完整 WP-09 为 `142 passed`，前序 WP-05..08 与 Agent Core 定向回归为 `224 passed`，全部退出码 `0`。状态保持 `WP09_SECURITY_FIX2_GREEN_READY`，未 stage、未 commit、未开始复审或 WP-10；证据分类为 `CONTEMPORANEOUS / VERIFIED`。 |
 | I-4b kill 异常后的最终 reap 整改 | `2026-07-23 12:05:01 +0800 (Asia/Shanghai)`：最终定向复审剩余 Critical `0`、Important `1`、Minor `0`。根因探针确认 `kill()` 异常会使 cleanup 在 `poll → terminate → first wait → kill` 后提前返回并跳过 final wait。新增两个精确参数化节点，collect-only 为 `2 collected / 0 errors`，实现前为 `2 failed / 0 errors`，均因缺少 final wait；最小整改使 kill 成功或异常均进入 bounded final wait。final wait 成功时返回 `reaped=true`、实际 returncode，并以独立 `GIT_KILL_FAILURE` 记录 kill cleanup issue；final wait 失败时返回 `reaped=false / GIT_REAP_FAILURE`。原 `GIT_TIMEOUT` 等业务 failure reason 保持在独立字段且不被覆盖，原始异常文本不进入结果。整改后新增节点 `2 passed`、完整 WP-09 `144 passed`、前序 WP-05..08 与 Agent Core 定向回归 `224 passed`，全部退出码 `0`。当前状态为 `WP09_REAP_FIX_GREEN_READY`；未 stage、未 commit、未预写复审批准、WP-09 完成或 WP-10。证据分类为 `CONTEMPORANEOUS / VERIFIED`。 |
 | 最终定向复审批准 | `2026-07-23 12:34:56 +0800 (Asia/Shanghai)`：补充记录正常 WP-09 审查流程事件 `WP09_FINAL_REREVIEW_APPROVED`，不是新的代码修改。复审 finding 为 kill exception 后缺少 final wait；对应两个新增节点曾合法 Red，整改保证 kill exception 后仍执行 bounded final wait。复审依据为 WP-09 `144 passed`、前序定向回归 `224 passed`；结论为 Critical `0`、Important `0`、Minor `0`，Decision 为 `Approved for commit-prep`，State 为 `WP09_FINAL_REREVIEW_APPROVED`。本条使用实际补录时间，不改写先前事件时间；未 stage、未 commit、未合并或进入 WP-10。证据分类为 `CONTEMPORANEOUS / VERIFIED`。 |
+
+## F-02 远程 PR/MR 协作证据缺失——追溯补记
+
+本节于 `2026-07-23 14:40:29 +0800 (Asia/Shanghai)` 追溯补记，用于记录 WP-01～WP-09 的历史远程协作证据状态，不是开发期间的同期记录。
+
+### USER_REPORTED
+
+- 用户确认：WP-01～WP-09 开发期间未初始化远程仓库，也未创建 PR/MR。
+- 用户确认：后续决定补充远程协作流程。
+- 本记录只说明历史状态，不创建或伪造历史协作证据。
+- 上述历史事实来自用户本次确认，不是远程平台或仓库内保存的同期证据。
+
+### VERIFIED
+
+- 当前仓库不存在 configured remote，也不存在 remote refs。
+- WP-01～WP-09 的 commit 均存在；本地 branch、worktree、commit 与 retained reflog 证据存在。
+- 当前 `main` 历史保持单父线性；未发现 merge commit，本地 fast-forward 事件可由 retained reflog 核对。
+- 当前仓库与过程文档中没有 PR/MR 平台对象编号、URL、approval、platform checks 或 remote merge 记录。
+- 本地 Git evidence 不等于 remote PR/MR evidence，不能据此补造远程审查结论。
+
+### UNKNOWN
+
+- 是否曾在仓库外进行远程讨论，以及是否存在未连接或当前不可访问的平台记录。
+- 历史 PR/MR URL、远程 reviewer、approval、CI checks、merge API 记录及其他平台证据。
+
+### 分类
+
+- 该 finding 不是产品缺陷、Git 历史损坏或代码质量问题。
+- 该 finding 属于工程协作流程缺失与远程审查证据缺失。
+
+### 后续整改规则
+
+用户本轮批准：从 WP-10 开始，每个 WP 必须：
+
+1. 创建独立 branch；
+2. 创建对应 worktree；
+3. 推送远程 branch；
+4. 创建真实 MR/PR；
+5. 在 MR/PR 中记录 subagent、人工修改、测试结果与 review evidence；
+6. 经过批准后 merge；
+7. 保持禁止 rebase、squash 与 history rewrite。
+
+### 非影响声明
+
+- 本追溯补记不修改 WP-01～WP-09 commit，不创建或伪造历史 MR。
+- 本追溯补记不改变 `SPEC.md`、`PLAN.md` 或已有产品语义。
+- 本追溯补记不进入 WP-10，也不执行任何后续远程流程。
