@@ -45,6 +45,40 @@
 - 首次代码质量复审返回 `CHANGES_REQUIRED`（Important 2、Minor 1）；权威表边界整改和隔离 mutation 证据已记录于 `AGENT_LOG.md`。整改后 reviewer `/root/wp01_quality_final_rereviewer` 返回 `APPROVED`，全部检查通过。
 - 中文文档合规整改已删除英文叙述模板，并将测试契约改为验证稳定的中文过程语义及显式批准的纠正工作树上下文；本次审查、stage 与 commit 仍为 `PENDING`。
 
+### WP-01 正式实现前陌生开发 Agent 规约冷启动验证——追溯补记
+
+本节于 `2026-07-23 13:17:04 +0800 (Asia/Shanghai)` 追溯补记，不是 WP-01 实施时的同期记录。本次事件是实现前陌生开发 Agent 对项目开发规约的冷启动验证，不是安装后、运行环境或产品级 cold-start。
+
+#### USER_REPORTED
+
+- 用户当前追溯确认：该事件发生于 WP-01 正式实现之前；使用了与主实现 Agent 不同类型的 Agent `Claude`，预期任务为尝试执行 WP-01。
+- 用户当前追溯确认：Claude 未稳定遵循项目开发协作中的中文输出和中文项目文档要求；用户随后修改 fresh Agent 启动 Prompt，显式加入中文协作约束。
+- 用户当前追溯确认：中文协作要求属于开发过程约束，不属于 Harness 产品语义。
+- 上述事实来自用户本次追溯确认，不是仓库内保存的同期证据。
+
+#### VERIFIED
+
+- 当前 `SPEC_PROCESS.md` 与 `AGENT_LOG.md` 中不存在该 Claude 事件的同期记录；后续过程记录中存在中文文档及中文协作整改。
+- 当前 `SPEC.md` 与 `PLAN.md` 未将中文输出或中文项目文档规定为 Harness 产品功能语义。
+- 本次补记仅修改 `SPEC_PROCESS.md` 与 `AGENT_LOG.md`，不修改产品规约、实现计划、产品代码或测试。
+- 后续中文整改记录只能证明后续整改存在，不能证明本次 Claude 事件本身发生。
+
+#### UNKNOWN
+
+- 精确发生日期和时间、原始启动 Prompt、Claude 原始输出或完整对话。
+- 当时执行的命令、测试结果、关联 commit、reviewer 及其他同期证据。
+
+#### 分类与处理
+
+- 用户本轮批准的过程分类：该 finding 属于开发过程上下文未显式传递或过程约束执行不稳定，不属于 Harness 产品规约缺陷，因此不修改 `SPEC.md` 或 `PLAN.md`。【USER_REPORTED / 本轮批准的过程决定】
+- 用户本轮批准的后续处理规则：所有 fresh implementer / reviewer 的启动 Prompt 必须显式重复中文过程约束，不应依赖用户与主 Agent 之间的隐性共享上下文。【USER_REPORTED / 本轮批准的过程决定】
+
+#### 非影响声明
+
+- 本追溯补记不改变产品语义，不改变任何 Requirement/PV ownership。
+- 本追溯补记不完成或关闭正式产品安装/运行 cold-start 的 `PENDING` 项。
+- 本追溯补记不追溯修改已有 Git 历史，也不伪装成当时的实时记录。
+
 ## WP-02..08 追溯审计重建
 
 **RETROSPECTIVE AUDIT RECONSTRUCTION**
