@@ -79,3 +79,9 @@ The index below groups existing retrospective entries by work package for readab
 | 6 | WP-07 | “聚合补录 WP-07” |
 | 7 | WP-08 | “聚合补录 WP-08” |
 | 8 | 统一记录 | “登记统一 worktree/branch 复用偏差”；“登记同期记录缺口”；“执行追溯重建当前验证与恢复门禁”；“记录追溯文档编辑阶段 scoped cleanliness gate” |
+
+## 同期事件记录
+
+| 时间（Asia/Shanghai） | 角色 | 动作或命令 | 结果 | 证据引用 | 状态 |
+|---|---|---|---|---|---|
+| 2026-07-23 10:38:15 +0800 | 主 Agent | 创建 WP-09 独立 branch/worktree：`git worktree add .worktrees/wp-09-paths-file-model -b wp-09-paths-file-model main` | 从 base `bf6b067ccebf1697c67c64da5c83486d29db768c` 创建并确认 branch/worktree ownership；初次 baseline 命令因临时 `/tmp` venv 不存在而退出 127，恢复仅含 pytest 的临时环境后以同一命令重跑为 `1 passed`；worktree 初始 clean、staged 为空，尚无 production/test 修改。证据分类：`CONTEMPORANEOUS / VERIFIED`。 | 当前 `git worktree`、branch、HEAD、status、pytest 与 cache 检查输出 | STARTED / NO IMPLEMENTATION YET |

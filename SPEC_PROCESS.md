@@ -190,3 +190,23 @@
 | reviewer identity | 原 reviewer 的真实身份没有仓库证据。 | 【UNKNOWN】 |
 | 未保存证据 | 原始 Red/Green 输出、reviewer 原文、精确执行时间和临时报告内容未保存在仓库。 | 【UNKNOWN】 |
 | completion | 技术关闭结论保持；owned PV 状态记录为 `IMPLEMENTED`，在 supporting verification 完成前不提升为 `VERIFIED`。证据置信度为 mixed。 | commit/当前测试【VERIFIED】；历史过程【USER_REPORTED】；缺失材料【UNKNOWN】 |
+
+## WP-09：路径与支持文件模型 — 同期启动记录
+
+**记录类型：** `CONTEMPORANEOUS / VERIFIED`
+
+| 字段 | 同期记录 |
+|---|---|
+| 实际记录时间 | `2026-07-23 10:38:15 +0800 (Asia/Shanghai)` |
+| branch ownership | `wp-09-paths-file-model`，仅用于 WP-09。 |
+| worktree ownership | `/home/apophis/ai4coding/MyHarness/.worktrees/wp-09-paths-file-model`，不复用旧 WP worktree。 |
+| base commit | 从 `main` 的 `bf6b067ccebf1697c67c64da5c83486d29db768c` 创建；新 worktree 初始 HEAD 与该 commit 精确一致。 |
+| start gate | branch、HEAD、worktree path 均符合 WP-09 ownership；初始 worktree clean、staged 为空；临时 `/tmp` venv 缺失后仅恢复 pytest 环境，同一 baseline-clean node 重跑为 `1 passed`；未产生项目内 cache/bytecode。 |
+| Requirement scope | `SEC-001`、`ACT-004..006`、`WS-012..014`。 |
+| owned PV | `PV-ACT-004`、`PV-ACT-005`、`PV-ACT-006`、`PV-SEC-001`、`PV-WS-013`、`PV-WS-014`；`WS-012` 为 involved Requirement，其 PV 仍由 PLAN 指定的后续 package owning。 |
+| owned files | `src/coding_harness/workspace/paths.py`、`src/coding_harness/workspace/file_model.py`、`tests/unit/workspace/test_paths.py`。 |
+| planned interfaces | `RepoPath.parse`、`SupportedEntry`、`inspect_supported_entry`。 |
+| preceding interface dependency | PLAN 未列出必须导入的前序 public type；契约语义承接结构化 action 的仓库根相对路径边界，WP-09 自有接口仍按上述 owned files 实现。 |
+| planned first Red node | `tests/unit/workspace/test_paths.py::test_relative_path`；本轮未创建或运行 WP-09 Red。 |
+| current status | `STARTED / NO IMPLEMENTATION YET`；无 production/test 修改，未开始 specification review 或 code-quality review。 |
+| evidence classification | 本条由当前 Git/worktree、冻结 PLAN/SPEC、baseline-clean 与文件范围命令直接证明，均为 `CONTEMPORANEOUS / VERIFIED`。 |
