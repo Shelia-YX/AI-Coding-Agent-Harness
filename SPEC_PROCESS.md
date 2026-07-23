@@ -31,6 +31,48 @@
 
 未来支持证据槽仍为 `PENDING`：CI 证据、cold-start 验证、六文档闭环、第二个 commit 以及 WP-01 完成状态。通过 WP-01 计划测试不会改变任何 Requirement 的 `PLANNED` 状态。
 
+## 正式规格形成前 Brainstorming 证据——追溯归档
+
+本节于 `2026-07-23 16:12:26 +0800 (Asia/Shanghai)` 追溯归档，用于保存正式 `SPEC.md` 形成前的 brainstorming 过程摘要。它不是当时的同期仓库记录，也不复制完整对话。
+
+### Evidence Source
+
+| 附件名称 | 当前可读行数 | SHA-256 |
+|---|---:|---|
+| `澄清 AI4SE 项目需求` | 2709 | `76a7497145b136950d617ceae5a3afb512a470b66ea506402f96824de2665816` |
+| `澄清首个关键问题` | 4996 | `81995d79e4b0fd08d07662ae7034b82187328cf0ebf1ec4104436788cd2e2e9b` |
+
+### VERIFIED
+
+以下仅表示当前提供的附件文本中存在相应记录，不将附件来源或历史时间升级为仓库同期机器证据：
+
+- 附件明确记录使用 `superpowers:using-superpowers` 与 `superpowers:brainstorming`，并采用只读探索、每轮一个核心问题、先解释影响、比较候选方案、等待人工确认后再推进的 workflow。
+- 项目定位经过候选方案比较，收敛为面向本地单一代码仓库、处理中小规模编码任务的受控型通用 Coding Agent MVP。
+- 任务输入收敛为 `Issue-driven interactive task contract`：用户提交 Issue 级自然语言任务，Agent 先只读调查并提出任务理解、计划、范围、验收与风险；计划批准和高风险动作批准相互独立。
+- Decision、Tools、Memory、Governance、Feedback、Configuration 六个 Harness 维度均被列为最低可运行要求。
+- 主要贡献先以治理、事务化执行与可恢复性作为暂定方向，随后比较“受治理的事务化执行”“确定性治理与验收”“可恢复的工作区事务”三个候选，最终收敛为“受治理的事务化执行”。
+- 附件明确把设计冻结作为进入正式 `SPEC.md` 的门禁，并要求后续规范不是 brainstorming 对话的简单复制。
+
+### USER_REPORTED
+
+- 用户确认上述两份附件来自项目早期 brainstorming 过程。
+- 用户确认这两份附件应作为正式 brainstorming evidence 的来源归档。
+
+### UNKNOWN
+
+- 原始 brainstorming 的精确日期与时间、原始会话平台和会话 ID。
+- 当时 Agent/model 的可验证身份。
+- 两份附件是否包含全部轮次、是否经过裁剪或格式转换，以及跨附件的精确时间顺序。
+- 原始只读命令与完整终端输出，以及附件内容与具体 Git commit 的精确对应关系。
+
+### Impact
+
+- 该 brainstorming 过程为后续 `SPEC.md` 的项目定位、权威边界、主要贡献和章节重点提供了形成依据。
+- 该过程影响 `PLAN.md` 对 Agent Core、治理、工作区事务、确定性演示和后续验证工作的规划。
+- 后续架构叙事以“受治理的事务化执行”为中心，将 Agent loop、确定性 Policy/审批/验收、隔离工作区、Baseline、Change Set、冲突检测和可恢复 Apply 组织为同一机制链。
+- 本归档仅证明过程证据及决策形成记录存在，不代表任何设计已经实现、测试或验收完成。
+- 本归档不改变现有 Requirement/PV ID、ownership 或状态，也不覆盖冻结的 `SPEC.md` 与 `PLAN.md`。
+
 ## WP-01 证据状态
 
 - 冻结基线 commit：已记录。
