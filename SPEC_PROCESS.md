@@ -300,3 +300,30 @@
 - 本追溯补记不修改 WP-01～WP-09 commit，不创建或伪造历史 MR。
 - 本追溯补记不改变 `SPEC.md`、`PLAN.md` 或已有产品语义。
 - 本追溯补记不进入 WP-10，也不执行任何后续远程流程。
+
+## CLI-only 课程 MVP 与 WebUI Future Extension——范围决策记录
+
+本节记录时间为 `2026-07-23 15:58:21 +0800 (Asia/Shanghai)`。这是当前人工范围决策的过程审计记录，不是对既有 WebUI 设计的删除，也不是 WebUI 完成证据。
+
+### 原始设计与课程约束
+
+- 当前冻结的 `SPEC.md` 与 `PLAN.md` 保留原始 WebUI、API/SSE、静态资源和相关验证设计；本次记录不修改这些权威文档或任何 Requirement/PV ID。【VERIFIED】
+- 用户确认当前课程交付允许两种路径：CLI-only 加 hosted release，或 CLI 加 WebUI。【USER_REPORTED】
+
+### 人工范围决策
+
+- 用户批准当前课程 MVP 选择 `CLI-only + GitHub Release` 交付路径。【USER_REPORTED / APPROVED DECISION】
+- WebUI 状态为 `DEFERRED / FUTURE EXTENSION`；该状态不表示删除原始设计，不表示已经实现或验证 WebUI，也不把相关 Requirement/PV 伪装为完成。【USER_REPORTED / APPROVED DECISION】
+- GitHub Release、CLI distribution、README、CI、Mock LLM 集成演示和 fresh-agent cold-start 仍须按后续实际证据分别闭合；本条不预先记录任何完成状态。【USER_REPORTED / APPROVED DECISION】
+
+### 影响分析
+
+- Agent Loop、Decision Control、Tool Boundary、Governance、Approval、Acceptance 与 Workspace Safety 的既有架构和安全边界保持不变。
+- 本决策只调整当前课程 MVP 的交付界面选择，不修改已有实现、测试、Requirement/PV ownership 或 Git 历史。
+- 当前冻结 `SPEC.md` 中的 WebUI 设计文本继续保留；本记录不把课程 CLI-only 选择冒充为对冻结规范文本的静默修改。最终若需声明冻结 SPEC 全量符合，仍须单独处理该范围差异并保留批准证据。
+
+### 非影响声明
+
+- 本次仅修改 `SPEC_PROCESS.md` 与 `AGENT_LOG.md`，不修改 `SPEC.md`、`PLAN.md`、产品代码或测试。
+- 本次不创建 GitHub Release，不创建 WebUI、WP-10 文件或其他交付制品。
+- 本次不创建 commit，不改写 Git 历史，也不进入 WP-10 implementation。
