@@ -413,3 +413,26 @@
 - 后续 production 实现、Green、回归、review、commit、push 与 PR 的结果均尚不存在，不能提前记录。
 
 本证据不关闭 WS-001、WS-006～009 或对应 PV，也不改变其状态。
+
+### WP-10 Green 阶段证据
+
+本段于 `2026-07-24 11:29:07 +0800 (Asia/Shanghai)` 同期记录 WP-10 从合法 Red 到最小 Green 的实现证据；当前仍等待 review，不表示 WP-10 已完成、已 commit 或已 merge。
+
+#### VERIFIED
+
+- Red 基线为 `14 collected / 0 passed / 14 failed / 0 errors`，全部分类为缺少 WP-10 production API 的 `EXPECTED_RED`；最小实现后，以相同定向文件执行得到 `14 passed / 0 failed`。
+- 新增 `src/coding_harness/workspace/manifest.py`，提供不可变 `BaselineManifest` 与 WP-10 ownership 内的 `build_baseline`；新增 `src/coding_harness/workspace/materialize.py`，提供不可变 `TaskWorkspace` 与 `materialize_workspace`。
+- 实现捕获任务启动时 tracked、staged、unstaged、untracked 用户文件状态，并从不可变 manifest 内容创建独立可写 Task Workspace。
+- 定向测试验证 origin repository 内容、index、HEAD 与 branch 均保持不变，且 materialized workspace 不复制或挂载 `.git`。
+- WP-09 定向回归 `tests/unit/workspace/test_paths.py` 为 `144 passed / 0 failed`。
+- 当前 production diff 仅新增 WP-10 owned 的 `manifest.py` 与 `materialize.py`；未修改 WP-09 的 `paths.py` 或 `file_model.py`，未实现 WP-11 ignored input、WP-12 synthetic Git、WP-13 Change Set 或 WP-14 apply/recovery。
+
+#### USER_REPORTED
+
+- 用户批准本轮目标为以最小 WP-10 production 将既有 `14` 个 Red 节点推进到 Green，并要求完成后等待 review。
+
+#### UNKNOWN
+
+- 后续 review、整改、Green commit、push、PR 与 merge 结果尚不存在，不能提前记录。
+
+本阶段不关闭 WS-001、WS-006～009 或对应 PV；状态为 `WP10_GREEN_DOCUMENTATION_READY` 前的同期 Green 证据。
