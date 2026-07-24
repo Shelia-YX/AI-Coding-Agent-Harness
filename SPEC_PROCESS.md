@@ -748,3 +748,28 @@
 - 当前 `ignored.py` 不得提交；I-1 后续不得进行无关重构。
 - I-2～I-4 需要第二轮定向 Red；第二轮 production remediation 尚未授权。
 - 本次仅记录复审，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push、创建 PR 或进入 WP-12。
+
+### WP-11 第二轮 Residual Red 证据
+
+本段于 `2026-07-24 15:05:50 +0800 (Asia/Shanghai)` 同期记录 I-2～I-4 第二轮 residual regression tests 的合法 Red；I-1 保持 CLOSED，round-2 production remediation 尚未授权。
+
+#### VERIFIED
+
+- `tests/integration/workspace/test_ignored.py` collect-only 成功：`82 collected / 0 collection errors`。
+- 原有 WP-11 tests 为 `61 passed`，无旧测试回归。
+- 新增 residual tests 为 `21` 个，完整执行结果为 `61 passed / 21 failed / 0 errors`。
+- 新增节点分类为 `EXPECTED_RED = 21`、unexpected pass `0`、errors `0`。
+- Finding 映射完整：I-2 为 `4` 个 EXPECTED_RED，I-3 为 `11` 个 EXPECTED_RED，I-4 为 `6` 个 EXPECTED_RED。
+
+#### Failure classification
+
+- **I-2 — OPEN**：cleanup ledger 缺少 dev/inode ownership 证明；`ENOTEMPTY` 与 descriptor close failure 的完成状态不正确；路径替换后仍可能误删非 owned 同名对象。
+- **I-3 — OPEN**：genesis `expected_manifest_identity` 尚未由稳定规范化字段确定性构造；Approval 提供的 identity 仍可能成为事实来源；task、PlanVersion、baseline、source、mode、destination 与 idempotency 等 stable-field binding 不完整。
+- **I-4 — OPEN**：descriptor authority 生命周期不连续；source/ignore validation 仍存在路径式重建；post-publish chmod 与 cleanup 仍可能作用于竞争替换后的 inode。
+
+#### Boundary
+
+- I-1 保持 CLOSED；I-2、I-3、I-4 仍为 OPEN，合法 residual Red 不表示 finding 已关闭。
+- 本轮新增 Red 时 production 未变化；既有 `src/coding_harness/workspace/ignored.py` 第一轮 remediation working diff 保持未提交，其 diff SHA-256 指纹仍为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
+- Round-2 production remediation 尚未授权；未进入 PR 或 WP-12，未修改 WP-07、WP-09、WP-10 或冻结 `SPEC.md`/`PLAN.md`。
+- 当前状态：`WP11_RESIDUAL_RED_EXECUTION_COMPLETE`。
