@@ -806,3 +806,56 @@
 - 既有 `src/coding_harness/workspace/ignored.py` working diff 不得丢失、reset、stash、stage 或提交；其当前 diff SHA-256 指纹为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
 - `tests/integration/workspace/test_ignored.py` 当前 SHA-256 为 `9eb659dbc95b2017d23eba0f57a7e41cbbdb3ccbb0f880d0862bb6fe8a4e28ce`。
 - 本次仅记录冲突和合法停止事件，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`。
+
+### WP-11 Identity Algorithm 与 Stage Set 人工裁决
+
+本段于 `2026-07-24 16:07:22 +0800 (Asia/Shanghai)` 同期记录人工裁决 `IDENTITY_ALGORITHM_APPROVED`。接口结论保持 `NO_INTERFACE_REDECISION_REQUIRED`；本次只批准 identity v1 与 stage-set 合同，不授权修改 tests 或继续 production remediation。
+
+#### 唯一 Identity v1
+
+- WP-11 采用 typed length-prefixed binary canonical encoding、SHA-256 和恰好 `64` 个 lowercase hexadecimal 字符输出。
+- 当前只支持唯一固定 schema v1；builder 与 gateway 均不接受调用方提供的 algorithm/schema version。Approval 通过冻结 v1 计算出的 expected identity 间接绑定算法；当前不新增或声称已有独立 schema-version 字段，不修改 WP-07 Approval 公共合同。
+- Future v2 必须重新进行 identity migration/interface/security decision；当前不支持多版本并存、自动 downgrade 或 fallback。
+- 三个独立 domain 为：
+  - `coding-harness:workspace-logical-identity`
+  - `coding-harness:sandbox-input-expected-identity`
+  - `coding-harness:sandbox-input-manifest-digest`
+
+#### Canonical binary grammar
+
+- `VarUInt` 为最短形式的 canonical unsigned LEB128。
+- `TypedValue := TypeCode || VarUInt(payload_length) || payload`。
+- `Field := VarUInt(field_tag) || TypedValue`。
+- `StructPayload := VarUInt(field_count) || Field[0] || ... || Field[n-1]`。
+- `ListPayload := VarUInt(element_count) || TypedValue[0] || ... || TypedValue[n-1]`。
+- `OptionalPayload := 0x00 | 0x01 || TypedValue`。
+- `VariantPayload := VarUInt(variant_tag) || TypedValue`；genesis 使用独立 tagged variant，不使用普通字符串 sentinel。
+- Struct field tags 必须严格递增；duplicate、missing、unknown 或 out-of-order tag 均 fail closed。Digest payload 固定为 `32` raw bytes，boolean payload 固定为 `1` byte；所有 nested payload 均受外层长度约束，decoder 必须拒绝 trailing bytes。相同抽象输入只能产生唯一 canonical byte stream。
+
+#### RepoPath、Unicode、Destination 与 Stage Set
+
+- RepoPath 仅复用 WP-09 public canonical validation，并编码 `RepoPath.canonical` 的 exact strict UTF-8 bytes；WP-11 不追加 normalization 或路径字符限制，不接受 bytes、隐式转换或 OS path。
+- 普通 identifier 必须是非空 `str` 且可 strict UTF-8 编码；WP-11 不静默 normalization，identity 绑定 exact code-point/UTF-8 sequence，并仅复用所属 public contract 的字符限制。
+- `destination_repo_path` 固定派生为 TaskWorkspace namespace 中与 source 相同的 canonical RepoPath；builder 自行派生，调用方不得覆盖。Source 与 destination 即使文本相同也使用不同 field tag。
+- 批准 stage set `S2 = {EXECUTING, VERIFYING}`。每个 entry 的合法 canonical `allowed_stages` 仅为 `("EXECUTING",)` 或 `("EXECUTING", "VERIFYING")`；必须包含 `EXECUTING`，`VERIFYING` 可选。Token 为大小写敏感的 uppercase ASCII，按 ASCII bytes 排序；duplicate、unknown token fail closed。
+- 运行时 `TaskState` 扩展不得自动扩展 v1；任何新 stage 必须经过新 schema/security decision。
+
+#### Public pure builder 与 identity layering
+
+- 批准 WP-11 public pure builder `compute_expected_manifest_identity(...)`。其职责仅限输入 validation、normalization、workspace logical identity 计算、destination derivation 和 expected identity computation。
+- Builder 不得 consume Approval、决定 Policy、创建 CAS intent、materialize 文件或返回 authorization state；它不创建新的 WP-07 authority 类型。
+- 固定分层：
+
+  `candidate_manifest.identity == expected_manifest_identity`
+
+  `candidate_manifest.digest == approval/CAS-bound manifest digest`
+
+- Expected identity 与 candidate manifest digest 使用不同 domain 和字段集，不得相等或互换；expected identity 只绑定审批前稳定请求，manifest digest 进一步绑定 Approval/CAS、Policy、immutable exclusion flags 与 ordered manifest entries。
+
+#### Vectors、findings 与 gate
+
+- Genesis minimal、genesis multi-entry/multi-stage、continuation 和 stable-field mutation 四类 vector 输入计划获批。
+- Exact vector digest 尚未生成或冻结；后续必须由 encoder A、independent oracle B 和 annotated byte-stream review 三方一致后才能冻结进 tests/process evidence，production builder 不得作为自身 oracle。
+- I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。
+- Test-contract revision 尚未开始，production remediation 保持暂停；未进入 PR 或 WP-12。
+- 本次不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不生成 vector digest，不 stage、commit 或 push。
