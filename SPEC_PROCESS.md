@@ -888,3 +888,85 @@
 - Decoder conformance 为 `DEFERRED_TO_DECODER_CONFORMANCE_TESTS`、`OUT_OF_SCOPE_FOR_VECTOR_FREEZE`，不得据此声称 wire-invalid 已验证。
 - Reproducibility rerun 为 `DEFERRED`，原因是 candidate scripts 不支持 non-overwriting output root；该延期不等于 reproducibility `PASS`。
 - Candidate scripts 本身不进入仓库。本次冻结不开始 test-contract revision，不继续 production remediation；I-1 保持 `CLOSED`，I-2、I-3、I-4 保持 `OPEN`，未进入 PR 或 WP-12。
+
+### WP-11 Public Identity Builder Interface 人工裁决
+
+本段于 `2026-07-24 17:17:25 +0800 (Asia/Shanghai)` 同期记录人工裁决 `WP11_PUBLIC_BUILDER_INTERFACE_APPROVED`。接口结果为 `NO_INTERFACE_REDECISION_REQUIRED`；本次只冻结 public identity builder 的最小公共接口，不恢复 test-contract revision，也不授权 production remediation。
+
+#### Signature、Request 与 Previous Reference
+
+- 批准唯一签名：
+
+  ```python
+  def compute_expected_manifest_identity(
+      request: ExpectedManifestIdentityRequest,
+  ) -> ExpectedManifestIdentityResult:
+      ...
+  ```
+
+- 函数只接受单一 `ExpectedManifestIdentityRequest`；固定使用 identity v1，不接受 version/schema 参数。非精确 request 类型 fail closed。函数必须 pure、deterministic，不承担 Approval、Policy、CAS 或 filesystem authority。
+- `ExpectedManifestIdentityRequest` 为 `@dataclass(frozen=True, slots=True)`，字段精确为：
+  - `task_id: str`
+  - `plan_version_identity: str`
+  - `baseline_digest: str`
+  - `previous_manifest: PreviousSandboxInputManifestRef | None`
+  - `new_revision: int`
+  - `entries: tuple[ExpectedManifestEntry, ...]`
+  - `idempotency_key: str`
+  - `max_input_count: int`
+  - `max_input_bytes: int`
+- `entries` 必须为精确 tuple。Request 不接受 caller-supplied destination、workspace identity、expected identity、Approval、Policy 或 CAS intent；validation limits 不进入 identity，builder 不修改输入。
+- `PreviousSandboxInputManifestRef` 为不可变、slots 类型，字段为 `revision: int`、`identity: str`、`digest: str`。`None` 是唯一 genesis 表示，ref 表示 continuation；revision 必须为正的精确 int且拒绝 bool，identity/digest 必须是 `64` lowercase hex，`new_revision == previous.revision + 1`。
+- Builder 不验证 previous ref 是否对应当前 active manifest；currentness 由 gateway/Approval/CAS 验证，该引用不依赖 WP-23。
+
+#### Entry、Identifier 与 Limits
+
+- `ExpectedManifestEntry` 为不可变、slots 类型，字段为：
+  - `source: RepoPath`
+  - `kind: IgnoredInputKind`
+  - `approved_size: int`
+  - `content_digest: str`
+  - `mode: IgnoredInputMode`
+  - `allowed_stages: tuple[str, ...]`
+- V1 的 kind 仅允许 `REGULAR_FILE`；approved size 必须为非负精确 int并拒绝 bool。Stage 必须为 tuple 且仅允许 `("EXECUTING",)` 或 `("EXECUTING", "VERIFYING")`；list、reversed、duplicate 或 unknown stage 均 fail closed。Destination 从 source 派生，duplicate source fail closed。
+- Required identifier 必须为非空 `str` 且可 strict UTF-8 编码。WP-11 不静默 normalization，只复用 identifier 所属 public contract 已有的字符限制，不无条件新增 NUL 或 Unicode 字符禁令；exact UTF-8 sequence 进入 identity。
+- `max_input_count` 与 `max_input_bytes` 必须为非负精确 int，拒绝 bool；`0` 合法。二者只约束当前 request，只参与 validation，不进入 identity。非法 limit 使用 `INVALID_LIMIT`，实际超限分别使用 `COUNT_LIMIT_EXCEEDED` 与 `BYTE_LIMIT_EXCEEDED`。
+
+#### Result、Failure Contract 与 Public Exports
+
+- `ExpectedManifestIdentityResult` 为不可变、slots 类型，仅包含：
+  - `workspace_logical_identity: str`
+  - `expected_manifest_identity: str`
+- Result 不返回 normalized entries、destination、canonical bytes、authorization、Approval/CAS、manifest、runtime receipt 或任何 filesystem authority。
+- 公共异常为 `ExpectedManifestIdentityError(ValueError)`，其稳定字段为 `reason: ExpectedManifestIdentityReason`。最终 reason set 为：
+  - `INVALID_REQUEST`
+  - `INVALID_IDENTIFIER`
+  - `INVALID_DIGEST`
+  - `INVALID_REPO_PATH`
+  - `INVALID_ENTRY_TYPE`
+  - `INVALID_MODE`
+  - `INVALID_STAGE_SET`
+  - `DUPLICATE_SOURCE`
+  - `INVALID_SIZE`
+  - `INVALID_LIMIT`
+  - `INVALID_REVISION`
+  - `INVALID_PREVIOUS_MANIFEST`
+  - `COUNT_LIMIT_EXCEEDED`
+  - `BYTE_LIMIT_EXCEEDED`
+- Reason 是稳定测试合同；message 非稳定且不得泄漏文件内容、secret、绝对路径或底层异常。所有失败必须 fail before hash，不返回部分 result、不修改输入，也不进行 filesystem、Approval、Policy 或 CAS 操作。
+- 从 `coding_harness.workspace.ignored` 公开：
+  - `compute_expected_manifest_identity`
+  - `ExpectedManifestIdentityRequest`
+  - `ExpectedManifestEntry`
+  - `PreviousSandboxInputManifestRef`
+  - `ExpectedManifestIdentityResult`
+  - `ExpectedManifestIdentityError`
+  - `ExpectedManifestIdentityReason`
+- 不新建 `coding_harness.workspace.__init__`，也不公开 encoder、canonical byte stream helper 或 authorization state。
+
+#### Frozen Vector Mapping 与 Gate
+
+- Frozen fixture 的 `input` 无歧义映射为 request；`derived` 仅为 audit evidence，不是 builder input；`expected.workspace_logical_identity` 与 `expected.expected_manifest_identity` 分别映射到 result 的同名字段。
+- `genesis-minimal`、`genesis-multi` 与 `continuation-single-entry` 三个 base vector 均适用上述映射。Destination 由 source 派生；validation limits 仅用于校验。
+- 当前状态：public builder interface `APPROVED`；identity algorithm v1 `APPROVED`；normative vectors `FROZEN / REMOTE-SYNCED`；test-contract revision 仍为 `PAUSED`，production remediation 仍为 `PAUSED`。
+- I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。本次未修改 production/tests、frozen fixtures 或冻结 `SPEC.md`/`PLAN.md`，未进入 PR 或 WP-12。
