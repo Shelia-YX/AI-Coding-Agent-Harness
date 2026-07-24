@@ -710,3 +710,41 @@
 - I-1～I-4 仍保持 open；合法 Red 不表示 finding 已关闭。
 - Production remediation 尚未授权，未进入 WP-12～WP-15 或 WP-23。
 - 当前状态：`WP11_REMEDIATION_RED_EXECUTION_COMPLETE`。
+
+### WP-11 第一次 Remediation Security/Specification Re-review
+
+本段于 `2026-07-24 14:44:48 +0800 (Asia/Shanghai)` 同期记录对 review base `a5fea62e031b4692105bb12c8f3a2d551ac7b7fb` 之未提交整改实现的第一次只读定向复审。Dirty production diff 精确为 `src/coding_harness/workspace/ignored.py`。新鲜验证为 WP-11 `61 passed`，WP-07/WP-09/WP-10 定向回归 `253 passed`；测试通过不替代源码控制流与安全合同审查。
+
+#### Finding closure
+
+- **I-1 — Approval consumption 与失败原子性：CLOSED**
+  - 成功结果明确为 `PUBLISHED_PENDING_COMMIT`，分别返回 trusted consumed candidate、精确 Approval CAS intent 和 candidate manifest；`active_manifest=None`、`persistence_committed=false`，未声称 CAS 已提交。
+  - 失败结果返回原 current Approval 并保持原 revision，不暴露 consumed candidate、CAS intent 或 candidate manifest，也不返回成功 publication state。
+
+#### Open findings
+
+- **I-2 — 文件副作用失败原子性：OPEN**
+  - Cleanup ledger 仅使用 `Path`/name，未为每个 owned object 保存并在删除前复核 parent/name/dev/inode。
+  - `ENOTEMPTY` 被当作 cleanup complete；descriptor close 异常被静默忽略。
+  - 残余风险为遗留本次创建的 owned object，或删除竞争替换后的同名非 owned 对象。
+- **I-3 — SandboxInputManifest 完整绑定：OPEN**
+  - Genesis `expected_manifest_identity` 直接采用 `approval.sandbox_manifest_identity`，未由 WP-11 从稳定规范化字段确定性构造。
+  - 当前只能证明 Approval 提供了某个 identity 值，不能证明该值完整绑定 task、PlanVersion、baseline 与 ordered entries。
+- **I-4 — Path/file safety 与 bounded failure：OPEN**
+  - Source root fd 在初次检查后关闭，后续按路径重新打开；ignore/source validation 仍包含路径式操作。
+  - 发布后仍使用路径式 `os.chmod(target_path)`；cleanup 仍使用路径式 `target.unlink()`、`directory.rmdir()`，辅助检查仍使用 `os.lstat(path)`，尚未由 parent fd 与 dev/inode ownership 完整约束。
+  - 因此仍存在 source root、published target 或 cleanup object 被替换的窗口。
+
+#### Unsafe API search
+
+- 未发现 `Path.read_bytes()`、`Path.write_bytes()`、`Path.replace()`、`shutil.copy*`、`shutil.rmtree()`、`os.rename()` 或 `os.replace()`。
+- 仍存在需整改的路径式 `target.unlink()`、`directory.rmdir()`、`os.chmod(target_path)` 和辅助 `os.lstat(path)`。
+
+#### Gate 与边界
+
+- Original findings closed：`1`；Original findings open：`3`。
+- New Critical：`0`；New Important：`0`；New Minor：`0`。
+- Decision：`CHANGES_REQUIRED`。
+- 当前 `ignored.py` 不得提交；I-1 后续不得进行无关重构。
+- I-2～I-4 需要第二轮定向 Red；第二轮 production remediation 尚未授权。
+- 本次仅记录复审，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push、创建 PR 或进入 WP-12。
