@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, replace
 import hashlib
 import importlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -31,12 +32,21 @@ from coding_harness.domain.models import PlanVersion
 from coding_harness.domain.policy import PolicyDecision, PolicyDecisionRecord
 from coding_harness.workspace.manifest import BaselineManifest, build_baseline
 from coding_harness.workspace.materialize import TaskWorkspace, materialize_workspace
+from coding_harness.workspace.paths import RepoPath
 
 
 OWNED_REQUIREMENTS = ("WS-010", "WS-011", "WS-012", "WS-015", "WS-016")
 _READ_ONLY = "read_only_input"
 _EPHEMERAL = "writable_ephemeral"
 _EXPECTED_RED = "WP-11 production API is not implemented"
+_IDENTITY_EXPECTED_RED = "WP-11 public identity builder API is not implemented"
+_VECTOR_FIXTURE = (
+    Path(__file__).resolve().parents[3]
+    / "tests"
+    / "fixtures"
+    / "workspace"
+    / "wp11_identity_v1_vectors.json"
+)
 
 
 def _api() -> SimpleNamespace:
@@ -1400,30 +1410,238 @@ def _replacement_repository(tmp_path: Path, content: bytes) -> SimpleNamespace:
     return repository
 
 
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate fixture key")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json(value: str) -> object:
+    raise ValueError("non-finite fixture number: " + value)
+
+
+def _frozen_identity_vectors() -> dict[str, dict[str, object]]:
+    document = json.loads(
+        _VECTOR_FIXTURE.read_text(encoding="utf-8"),
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_nonfinite_json,
+    )
+    assert type(document) is dict
+    assert document.get("fixture_schema") == "wp11-identity-v1-evidence:1"
+    algorithm = document.get("identity_algorithm")
+    assert type(algorithm) is dict
+    assert algorithm == {
+        "name": "typed-length-prefixed-binary-sha256",
+        "status": "approved",
+        "version": 1,
+    }
+    vectors = document.get("vectors")
+    assert type(vectors) is list
+    indexed: dict[str, dict[str, object]] = {}
+    for vector in vectors:
+        assert type(vector) is dict
+        vector_id = vector.get("id")
+        assert type(vector_id) is str and vector_id
+        assert vector_id not in indexed
+        assert type(vector.get("input")) is dict
+        assert type(vector.get("derived")) is dict
+        expected = vector.get("expected")
+        assert type(expected) is dict
+        for field in ("workspace_logical_identity", "expected_manifest_identity"):
+            value = expected.get(field)
+            assert (
+                type(value) is str
+                and len(value) == 64
+                and set(value) <= set("0123456789abcdef")
+            )
+        for field in ("workspace_canonical_stream_length", "canonical_stream_length"):
+            value = expected.get(field)
+            assert type(value) is int and value > 0
+        indexed[vector_id] = vector
+    assert set(indexed) == {
+        "genesis-minimal",
+        "genesis-multi",
+        "continuation-single-entry",
+    }
+    return indexed
+
+
+def _identity_api() -> SimpleNamespace:
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    names = (
+        "compute_expected_manifest_identity",
+        "ExpectedManifestIdentityRequest",
+        "ExpectedManifestEntry",
+        "PreviousSandboxInputManifestRef",
+        "ExpectedManifestIdentityResult",
+        "ExpectedManifestIdentityError",
+        "ExpectedManifestIdentityReason",
+    )
+    missing = tuple(name for name in names if getattr(module, name, None) is None)
+    if missing:
+        pytest.fail(
+            _IDENTITY_EXPECTED_RED + ": " + ", ".join(missing),
+            pytrace=False,
+        )
+    values = {name: getattr(module, name) for name in names}
+    values["IgnoredInputKind"] = module.IgnoredInputKind
+    values["IgnoredInputMode"] = module.IgnoredInputMode
+    return SimpleNamespace(**values)
+
+
+def _request_from_vector(
+    api: SimpleNamespace,
+    vector: dict[str, object],
+):
+    data = vector["input"]
+    assert type(data) is dict
+    previous_data = data["previous"]
+    assert type(previous_data) is dict
+    if previous_data["variant"] == "genesis":
+        previous = None
+    else:
+        assert previous_data["variant"] == "continuation"
+        previous = api.PreviousSandboxInputManifestRef(
+            revision=previous_data["revision"],
+            identity=previous_data["identity"],
+            digest=previous_data["digest"],
+        )
+    raw_entries = data["entries"]
+    assert type(raw_entries) is list
+    entries = tuple(
+        api.ExpectedManifestEntry(
+            source=RepoPath.parse(raw["source_repo_path"]),
+            kind=api.IgnoredInputKind(raw["file_type"]),
+            approved_size=raw["approved_size"],
+            content_digest=raw["content_digest"],
+            mode=api.IgnoredInputMode(raw["mode"]),
+            allowed_stages=tuple(raw["allowed_stages"]),
+        )
+        for raw in raw_entries
+    )
+    limits = data["validation_limits"]
+    assert type(limits) is dict
+    return api.ExpectedManifestIdentityRequest(
+        task_id=data["task_id"],
+        plan_version_identity=data["plan_version_identity"],
+        baseline_digest=data["baseline_digest"],
+        previous_manifest=previous,
+        new_revision=data["new_revision"],
+        entries=entries,
+        idempotency_key=data["idempotency_key"],
+        max_input_count=limits["max_input_count"],
+        max_input_bytes=limits["max_input_bytes"],
+    )
+
+
+def _runtime_request(
+    api: SimpleNamespace,
+    *,
+    baseline: BaselineManifest,
+    path: str,
+    content: bytes,
+    task_id: str = "task:1",
+    plan_identity: str = "plan:1",
+    mode: str = _READ_ONLY,
+    stages: tuple[str, ...] = ("EXECUTING",),
+    idempotency_key: str = "ignored:key:action:ignored:1",
+):
+    return api.ExpectedManifestIdentityRequest(
+        task_id=task_id,
+        plan_version_identity=plan_identity,
+        baseline_digest=baseline.digest,
+        previous_manifest=None,
+        new_revision=1,
+        entries=(
+            api.ExpectedManifestEntry(
+                source=RepoPath.parse(path),
+                kind=api.IgnoredInputKind.REGULAR_FILE,
+                approved_size=len(content),
+                content_digest=_digest(content),
+                mode=api.IgnoredInputMode(mode),
+                allowed_stages=stages,
+            ),
+        ),
+        idempotency_key=idempotency_key,
+        max_input_count=1,
+        max_input_bytes=len(content),
+    )
+
+
+def _mutate_hex(value: str) -> str:
+    return ("0" if value[0] != "0" else "1") + value[1:]
+
+
+def _descriptor_replace(
+    *,
+    original_unlink: object,
+    original_open: object,
+    parent_fd: int,
+    name: str,
+    content: bytes,
+) -> os.stat_result:
+    original_unlink(name, dir_fd=parent_fd)
+    descriptor = original_open(
+        name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=parent_fd,
+    )
+    try:
+        view = memoryview(content)
+        while view:
+            written = os.write(descriptor, view)
+            assert written > 0
+            view = view[written:]
+        return os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def test_cleanup_refuses_replaced_owned_inode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
-    target = case.workspace.root / "ignored" / "input.txt"
+    original_link = module.os.link
+    original_unlink = module.os.unlink
+    original_open = module.os.open
+    original_fsync = module.os.fsync
     replacement = b"replacement-object\n"
     replacement_status: os.stat_result | None = None
+    published = False
 
-    def replace_target_then_fail(
-        path: object,
-        mode: int,
+    def replace_after_link(
+        source: object,
+        target: object,
         *args: object,
         **kwargs: object,
     ) -> None:
-        nonlocal replacement_status
-        assert Path(path) == target
-        target.unlink()
-        target.write_bytes(replacement)
-        replacement_status = target.stat()
-        raise OSError("controlled post-publish failure")
+        nonlocal published, replacement_status
+        original_link(source, target, *args, **kwargs)
+        parent_fd = kwargs["dst_dir_fd"]
+        replacement_status = _descriptor_replace(
+            original_unlink=original_unlink,
+            original_open=original_open,
+            parent_fd=parent_fd,
+            name=os.fspath(target),
+            content=replacement,
+        )
+        published = True
 
-    monkeypatch.setattr(module.os, "chmod", replace_target_then_fail)
+    def fail_after_replacement(descriptor: int) -> None:
+        if published:
+            raise OSError("controlled descriptor-safe failure")
+        original_fsync(descriptor)
+
+    monkeypatch.setattr(module.os, "link", replace_after_link)
+    monkeypatch.setattr(module.os, "fsync", fail_after_replacement)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1433,6 +1651,7 @@ def test_cleanup_refuses_replaced_owned_inode(
     )
 
     _assert_denied(result)
+    target = case.workspace.root / "ignored" / "input.txt"
     assert replacement_status is not None
     assert target.exists()
     assert target.read_bytes() == replacement
@@ -1447,24 +1666,29 @@ def test_enotempty_is_cleanup_failure(
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
-    parent = case.workspace.root / "ignored"
-    original_open = module.os.open
-    injected = False
+    original_fsync = module.os.fsync
+    original_rmdir = module.os.rmdir
+    injected_write_failure = False
+    rmdir_calls: list[tuple[object, object]] = []
 
-    def make_owned_directory_nonempty(
+    def fail_first_file_sync(descriptor: int) -> None:
+        nonlocal injected_write_failure
+        status = os.fstat(descriptor)
+        if stat.S_ISREG(status.st_mode) and not injected_write_failure:
+            injected_write_failure = True
+            raise OSError("controlled owned temporary sync failure")
+        original_fsync(descriptor)
+
+    def fail_directory_cleanup(
         path: object,
-        flags: int,
         *args: object,
         **kwargs: object,
-    ):
-        nonlocal injected
-        if flags & os.O_CREAT and not injected:
-            injected = True
-            (parent / "foreign.txt").write_bytes(b"foreign\n")
-            raise OSError("controlled temporary creation failure")
-        return original_open(path, flags, *args, **kwargs)
+    ) -> None:
+        rmdir_calls.append((path, kwargs.get("dir_fd")))
+        raise OSError(getattr(os, "ENOTEMPTY", 39), "controlled nonempty")
 
-    monkeypatch.setattr(module.os, "open", make_owned_directory_nonempty)
+    monkeypatch.setattr(module.os, "fsync", fail_first_file_sync)
+    monkeypatch.setattr(module.os, "rmdir", fail_directory_cleanup)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1473,11 +1697,12 @@ def test_enotempty_is_cleanup_failure(
         authority=case.authority,
     )
 
+    assert injected_write_failure is True
+    assert rmdir_calls
     _assert_denied(result)
-    assert (parent / "foreign.txt").read_bytes() == b"foreign\n"
     assert result.reason == "IGNORED_INPUT_CLEANUP_FAILED"
     assert result.cleanup_complete is False
-    assert result.operation_reason == "IGNORED_INPUT_MATERIALIZATION_FAILED"
+    monkeypatch.setattr(module.os, "rmdir", original_rmdir)
 
 
 def test_cleanup_never_deletes_replacement_object(
@@ -1487,39 +1712,35 @@ def test_cleanup_never_deletes_replacement_object(
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
     original_unlink = module.os.unlink
+    original_open = module.os.open
     replacement_name: str | None = None
     replacement_content = b"replacement-temporary\n"
-    replaced = False
 
-    def replace_temporary_before_failure(
+    def replace_owned_temporary(
         path: object,
         *args: object,
         **kwargs: object,
     ) -> None:
-        nonlocal replacement_name, replaced
+        nonlocal replacement_name
         name = os.fspath(path)
+        parent_fd = kwargs.get("dir_fd")
         if (
-            name.startswith(".wp11-ignored-")
-            and kwargs.get("dir_fd") is not None
-            and not replaced
+            replacement_name is None
+            and name.startswith(".wp11-ignored-")
+            and type(parent_fd) is int
         ):
-            replaced = True
-            original_unlink(path, *args, **kwargs)
-            descriptor = os.open(
-                name,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o600,
-                dir_fd=kwargs["dir_fd"],
+            _descriptor_replace(
+                original_unlink=original_unlink,
+                original_open=original_open,
+                parent_fd=parent_fd,
+                name=name,
+                content=replacement_content,
             )
-            try:
-                os.write(descriptor, replacement_content)
-            finally:
-                os.close(descriptor)
             replacement_name = name
-            raise OSError("controlled temporary replacement")
+            raise OSError("controlled descriptor-relative cleanup failure")
         original_unlink(path, *args, **kwargs)
 
-    monkeypatch.setattr(module.os, "unlink", replace_temporary_before_failure)
+    monkeypatch.setattr(module.os, "unlink", replace_owned_temporary)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1553,22 +1774,22 @@ def test_cleanup_close_failure_cannot_report_complete(
         flags: int,
         *args: object,
         **kwargs: object,
-    ):
+    ) -> int:
         descriptor = original_open(path, flags, *args, **kwargs)
         if Path(path) == case.workspace.root:
             workspace_descriptors.add(descriptor)
         return descriptor
 
-    def fail_proof_relevant_close(descriptor: int) -> None:
+    def fail_owned_descriptor_close(descriptor: int) -> None:
         nonlocal injected
         if descriptor in workspace_descriptors and not injected:
             injected = True
             original_close(descriptor)
-            raise OSError("controlled workspace root close failure")
+            raise OSError("controlled descriptor close failure")
         original_close(descriptor)
 
     monkeypatch.setattr(module.os, "open", track_workspace_root)
-    monkeypatch.setattr(module.os, "close", fail_proof_relevant_close)
+    monkeypatch.setattr(module.os, "close", fail_owned_descriptor_close)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1584,33 +1805,50 @@ def test_cleanup_close_failure_cannot_report_complete(
 
 
 def test_genesis_expected_identity_is_deterministic(tmp_path: Path) -> None:
-    case = _valid_case(tmp_path, manifest_identity="caller-value:a")
-    second_workspace = materialize_workspace(
-        case.baseline,
-        tmp_path / "second-task-workspace",
-    )
-    second_authority = _authority_with_stable_binding(
-        baseline=case.baseline,
-        path="ignored/input.txt",
-        content=case.repository.ignored.read_bytes(),
-        manifest_identity="caller-value:b",
-    )
-    first = _invoke(
-        case.api,
-        source_root=case.repository.root,
-        baseline=case.baseline,
-        workspace=case.workspace,
-        authority=case.authority,
-    )
-    second = _invoke(
-        case.api,
-        source_root=case.repository.root,
-        baseline=case.baseline,
-        workspace=second_workspace,
-        authority=second_authority,
-    )
+    del tmp_path
+    vectors = _frozen_identity_vectors()
+    api = _identity_api()
+    for vector_id in (
+        "genesis-minimal",
+        "genesis-multi",
+        "continuation-single-entry",
+    ):
+        vector = vectors[vector_id]
+        request = _request_from_vector(api, vector)
+        result = api.compute_expected_manifest_identity(request)
+        expected = vector["expected"]
+        assert type(expected) is dict
+        assert type(result) is api.ExpectedManifestIdentityResult
+        assert (
+            result.workspace_logical_identity
+            == expected["workspace_logical_identity"]
+        )
+        assert (
+            result.expected_manifest_identity
+            == expected["expected_manifest_identity"]
+        )
 
-    assert first.expected_manifest_identity == second.expected_manifest_identity
+    continuation = _request_from_vector(
+        api,
+        vectors["continuation-single-entry"],
+    )
+    previous = continuation.previous_manifest
+    assert type(previous) is api.PreviousSandboxInputManifestRef
+    for changed_previous in (
+        replace(previous, identity=_mutate_hex(previous.identity)),
+        replace(previous, digest=_mutate_hex(previous.digest)),
+    ):
+        changed = api.compute_expected_manifest_identity(
+            replace(continuation, previous_manifest=changed_previous)
+        )
+        original = api.compute_expected_manifest_identity(continuation)
+        assert changed.expected_manifest_identity != original.expected_manifest_identity
+
+    with pytest.raises(api.ExpectedManifestIdentityError) as invalid:
+        api.compute_expected_manifest_identity(object())
+    assert invalid.value.reason is api.ExpectedManifestIdentityReason.INVALID_REQUEST
+    with pytest.raises(TypeError):
+        api.compute_expected_manifest_identity(continuation, schema=1)
 
 
 @pytest.mark.parametrize(
@@ -1622,7 +1860,7 @@ def test_genesis_expected_identity_is_deterministic(tmp_path: Path) -> None:
         "source-path",
         "source-digest",
         "mode",
-        "destination",
+        "stages",
         "idempotency-key",
     ),
 )
@@ -1630,99 +1868,90 @@ def test_genesis_identity_binds_stable_request_field(
     tmp_path: Path,
     field: str,
 ) -> None:
-    case = _valid_case(tmp_path, manifest_identity="shared-caller-value")
-    base = _invoke(
-        case.api,
-        source_root=case.repository.root,
-        baseline=case.baseline,
-        workspace=case.workspace,
-        authority=case.authority,
-    )
-    variant_baseline = case.baseline
-    variant_workspace = materialize_workspace(
-        case.baseline,
-        tmp_path / "variant-task-workspace",
-    )
-    variant_root = case.repository.root
-    path = "ignored/input.txt"
-    content = case.repository.ignored.read_bytes()
-    mode = _READ_ONLY
-    task_id = "task:1"
-    plan_identity = "plan:1"
-    idempotency_key = "ignored:key:action:ignored:1"
+    del tmp_path
+    vector = _frozen_identity_vectors()["genesis-minimal"]
+    api = _identity_api()
+    request = _request_from_vector(api, vector)
+    entry = request.entries[0]
     if field == "task":
-        task_id = "task:variant"
+        changed = replace(request, task_id=request.task_id + ":variant")
     elif field == "plan-version":
-        plan_identity = "plan:variant"
-    elif field == "baseline":
-        parent = tmp_path / "variant-baseline-fixture"
-        parent.mkdir()
-        repository = _repository(parent)
-        (repository.root / "extra.txt").write_text("extra\n", encoding="utf-8")
-        _git(repository.root, "add", "--", "extra.txt")
-        _git(
-            repository.root,
-            "-c",
-            "user.name=WP11 Test",
-            "-c",
-            "user.email=wp11@example.invalid",
-            "commit",
-            "-q",
-            "-m",
-            "variant",
+        changed = replace(
+            request,
+            plan_version_identity=request.plan_version_identity + ":variant",
         )
-        variant_root = repository.root
-        variant_baseline, variant_workspace = _workspace(tmp_path / "variant", variant_root)
-        path = "ignored/input.txt"
-        content = repository.ignored.read_bytes()
-    elif field in {"source-path", "destination"}:
-        path = "ignored/variant.txt"
-        source = case.repository.root / "ignored" / "variant.txt"
-        source.write_bytes(content)
+    elif field == "baseline":
+        changed = replace(request, baseline_digest=_mutate_hex(request.baseline_digest))
+    elif field == "source-path":
+        changed_entry = replace(
+            entry,
+            source=RepoPath.parse("ignored/variant.txt"),
+        )
+        changed = replace(request, entries=(changed_entry,))
     elif field == "source-digest":
-        content = b"variant-content\n"
-        case.repository.ignored.write_bytes(content)
+        changed_entry = replace(
+            entry,
+            content_digest=_mutate_hex(entry.content_digest),
+        )
+        changed = replace(request, entries=(changed_entry,))
     elif field == "mode":
-        mode = _EPHEMERAL
+        changed_entry = replace(
+            entry,
+            mode=api.IgnoredInputMode.WRITABLE_EPHEMERAL,
+        )
+        changed = replace(request, entries=(changed_entry,))
+    elif field == "stages":
+        changed_entry = replace(
+            entry,
+            allowed_stages=("EXECUTING", "VERIFYING"),
+        )
+        changed = replace(request, entries=(changed_entry,))
     else:
-        idempotency_key = "ignored:key:variant"
-    authority = _authority_with_stable_binding(
-        baseline=variant_baseline,
-        path=path,
-        content=content,
-        manifest_identity="shared-caller-value",
-        mode=mode,
-        task_id=task_id,
-        plan_identity=plan_identity,
-        idempotency_key=idempotency_key,
-    )
-    variant = _invoke(
-        case.api,
-        source_root=variant_root,
-        baseline=variant_baseline,
-        workspace=variant_workspace,
-        authority=authority,
-    )
+        changed = replace(
+            request,
+            idempotency_key=request.idempotency_key + ":variant",
+        )
 
-    assert variant.expected_manifest_identity != base.expected_manifest_identity
+    original_result = api.compute_expected_manifest_identity(request)
+    changed_result = api.compute_expected_manifest_identity(changed)
+    assert (
+        changed_result.expected_manifest_identity
+        != original_result.expected_manifest_identity
+    )
 
 
 def test_approval_manifest_identity_must_match_computed_genesis_identity(
     tmp_path: Path,
 ) -> None:
-    case = _valid_case(tmp_path, manifest_identity="caller-controlled-wrong-value")
+    case = _valid_case(tmp_path)
+    api = _identity_api()
+    content = case.repository.ignored.read_bytes()
+    request = _runtime_request(
+        api,
+        baseline=case.baseline,
+        path="ignored/input.txt",
+        content=content,
+    )
+    computed = api.compute_expected_manifest_identity(request)
+    wrong_identity = _mutate_hex(computed.expected_manifest_identity)
+    authority = _authority_with_stable_binding(
+        baseline=case.baseline,
+        path="ignored/input.txt",
+        content=content,
+        manifest_identity=wrong_identity,
+    )
     result = _invoke(
         case.api,
         source_root=case.repository.root,
         baseline=case.baseline,
         workspace=case.workspace,
-        authority=case.authority,
+        authority=authority,
     )
 
     _assert_denied(result)
-    assert result.expected_manifest_identity != "caller-controlled-wrong-value"
+    assert result.approval_cas_intent is None
     assert result.candidate_manifest is None
-    assert result.approval_result.approval is case.authority.approval
+    assert result.approval_result.approval is authority.approval
     assert result.approval_result.approval.consumed is False
     assert not (case.workspace.root / "ignored" / "input.txt").exists()
 
@@ -1730,36 +1959,34 @@ def test_approval_manifest_identity_must_match_computed_genesis_identity(
 def test_shared_approval_identity_cannot_collapse_distinct_genesis_requests(
     tmp_path: Path,
 ) -> None:
-    case = _valid_case(tmp_path, manifest_identity="shared-caller-value")
-    other_source = case.repository.root / "ignored" / "other.txt"
-    other_source.write_bytes(b"other\n")
-    other_workspace = materialize_workspace(
-        case.baseline,
-        tmp_path / "other-task-workspace",
+    del tmp_path
+    vectors = _frozen_identity_vectors()
+    api = _identity_api()
+    minimal = _request_from_vector(api, vectors["genesis-minimal"])
+    changed_entry = replace(
+        minimal.entries[0],
+        source=RepoPath.parse("ignored/other.txt"),
     )
-    other_authority = _authority_with_stable_binding(
-        baseline=case.baseline,
-        path="ignored/other.txt",
-        content=other_source.read_bytes(),
-        manifest_identity="shared-caller-value",
-    )
-    first = _invoke(
-        case.api,
-        source_root=case.repository.root,
-        baseline=case.baseline,
-        workspace=case.workspace,
-        authority=case.authority,
-    )
-    second = _invoke(
-        case.api,
-        source_root=case.repository.root,
-        baseline=case.baseline,
-        workspace=other_workspace,
-        authority=other_authority,
-    )
-
+    other = replace(minimal, entries=(changed_entry,))
+    first = api.compute_expected_manifest_identity(minimal)
+    second = api.compute_expected_manifest_identity(other)
     assert first.expected_manifest_identity != second.expected_manifest_identity
-    assert not (first.permitted and second.permitted)
+
+    multi = _request_from_vector(api, vectors["genesis-multi"])
+    reordered = replace(multi, entries=tuple(reversed(multi.entries)))
+    relaxed_limits = replace(
+        multi,
+        max_input_count=multi.max_input_count + 10,
+        max_input_bytes=multi.max_input_bytes + 10_000,
+    )
+    assert (
+        api.compute_expected_manifest_identity(reordered)
+        == api.compute_expected_manifest_identity(multi)
+    )
+    assert (
+        api.compute_expected_manifest_identity(relaxed_limits)
+        == api.compute_expected_manifest_identity(multi)
+    )
 
 
 def test_source_root_path_replacement_cannot_change_opened_authority(
@@ -1767,51 +1994,43 @@ def test_source_root_path_replacement_cannot_change_opened_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = _valid_case(tmp_path)
-    replacement_content = b"replacement-approved\n"
-    replacement = _replacement_repository(tmp_path, replacement_content)
-    authority = _authority_with_stable_binding(
-        baseline=case.baseline,
-        path="ignored/input.txt",
-        content=replacement_content,
-        manifest_identity="sandbox-manifest:replacement",
+    replacement = _replacement_repository(
+        tmp_path,
+        case.repository.ignored.read_bytes(),
     )
     module = importlib.import_module("coding_harness.workspace.ignored")
     original_open = module.os.open
-    original_close = module.os.close
-    source_descriptors: set[int] = set()
+    source_root_opens = 0
     replaced = False
     saved = tmp_path / "original-authority"
 
-    def track_source_root(
+    def replace_after_descriptor_open(
         path: object,
         flags: int,
         *args: object,
         **kwargs: object,
-    ):
+    ) -> int:
+        nonlocal source_root_opens, replaced
         descriptor = original_open(path, flags, *args, **kwargs)
         if Path(path) == case.repository.root:
-            source_descriptors.add(descriptor)
+            source_root_opens += 1
+            if not replaced:
+                replaced = True
+                os.rename(case.repository.root, saved)
+                os.rename(replacement.root, case.repository.root)
         return descriptor
 
-    def replace_after_initial_close(descriptor: int) -> None:
-        nonlocal replaced
-        original_close(descriptor)
-        if descriptor in source_descriptors and not replaced:
-            replaced = True
-            case.repository.root.rename(saved)
-            replacement.root.rename(case.repository.root)
-
-    monkeypatch.setattr(module.os, "open", track_source_root)
-    monkeypatch.setattr(module.os, "close", replace_after_initial_close)
+    monkeypatch.setattr(module.os, "open", replace_after_descriptor_open)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
         baseline=case.baseline,
         workspace=case.workspace,
-        authority=authority,
+        authority=case.authority,
     )
 
     assert replaced is True
+    assert source_root_opens == 1
     _assert_denied(result)
     assert not (case.workspace.root / "ignored" / "input.txt").exists()
 
@@ -1821,25 +2040,39 @@ def test_ignore_validation_uses_same_descriptor_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = _valid_case(tmp_path)
-    (case.repository.root / ".gitignore").write_text("other/\n", encoding="utf-8")
-    replacement = _replacement_repository(
-        tmp_path,
-        case.repository.ignored.read_bytes(),
-    )
     module = importlib.import_module("coding_harness.workspace.ignored")
+    original_open = module.os.open
+    original_close = module.os.close
     original_spawn = module.os.posix_spawnp
-    replaced = False
-    saved = tmp_path / "nonignored-authority"
+    live_source_roots: set[int] = set()
+    authority_seen = False
 
-    def replace_before_ignore_check(*args: object, **kwargs: object) -> int:
-        nonlocal replaced
-        if not replaced:
-            replaced = True
-            case.repository.root.rename(saved)
-            replacement.root.rename(case.repository.root)
+    def track_source_descriptor(
+        path: object,
+        flags: int,
+        *args: object,
+        **kwargs: object,
+    ) -> int:
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == case.repository.root:
+            live_source_roots.add(descriptor)
+        return descriptor
+
+    def track_close(descriptor: int) -> None:
+        live_source_roots.discard(descriptor)
+        original_close(descriptor)
+
+    def require_live_authority(*args: object, **kwargs: object) -> int:
+        nonlocal authority_seen
+        authority_seen = any(
+            stat.S_ISDIR(os.fstat(descriptor).st_mode)
+            for descriptor in live_source_roots
+        )
         return original_spawn(*args, **kwargs)
 
-    monkeypatch.setattr(module.os, "posix_spawnp", replace_before_ignore_check)
+    monkeypatch.setattr(module.os, "open", track_source_descriptor)
+    monkeypatch.setattr(module.os, "close", track_close)
+    monkeypatch.setattr(module.os, "posix_spawnp", require_live_authority)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1848,9 +2081,8 @@ def test_ignore_validation_uses_same_descriptor_authority(
         authority=case.authority,
     )
 
-    assert replaced is True
-    _assert_denied(result)
-    assert not (case.workspace.root / "ignored" / "input.txt").exists()
+    assert authority_seen is True
+    _assert_pending_persistence_contract(result, case.authority)
 
 
 def test_post_publish_mode_change_never_targets_replacement_inode(
@@ -1859,26 +2091,40 @@ def test_post_publish_mode_change_never_targets_replacement_inode(
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
-    target = case.workspace.root / "ignored" / "input.txt"
-    original_chmod = module.os.chmod
+    original_link = module.os.link
+    original_unlink = module.os.unlink
+    original_open = module.os.open
+    original_fchmod = module.os.fchmod
     replacement = b"replacement-after-link\n"
     replacement_status: os.stat_result | None = None
+    fchmod_before_link = False
+    linked = False
 
-    def replace_before_chmod(
-        path: object,
-        mode: int,
+    def record_fchmod(descriptor: int, mode: int) -> None:
+        nonlocal fchmod_before_link
+        assert linked is False
+        fchmod_before_link = True
+        original_fchmod(descriptor, mode)
+
+    def replace_after_link(
+        source: object,
+        target: object,
         *args: object,
         **kwargs: object,
     ) -> None:
-        nonlocal replacement_status
-        assert Path(path) == target
-        target.unlink()
-        target.write_bytes(replacement)
-        target.chmod(0o640)
-        replacement_status = target.stat()
-        original_chmod(path, mode, *args, **kwargs)
+        nonlocal linked, replacement_status
+        original_link(source, target, *args, **kwargs)
+        linked = True
+        replacement_status = _descriptor_replace(
+            original_unlink=original_unlink,
+            original_open=original_open,
+            parent_fd=kwargs["dst_dir_fd"],
+            name=os.fspath(target),
+            content=replacement,
+        )
 
-    monkeypatch.setattr(module.os, "chmod", replace_before_chmod)
+    monkeypatch.setattr(module.os, "fchmod", record_fchmod)
+    monkeypatch.setattr(module.os, "link", replace_after_link)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1887,14 +2133,13 @@ def test_post_publish_mode_change_never_targets_replacement_inode(
         authority=case.authority,
     )
 
-    _assert_denied(result)
+    target = case.workspace.root / "ignored" / "input.txt"
+    assert fchmod_before_link is True
     assert replacement_status is not None
     assert target.exists()
     assert target.read_bytes() == replacement
     assert target.stat().st_ino == replacement_status.st_ino
-    assert stat.S_IMODE(target.stat().st_mode) == stat.S_IMODE(
-        replacement_status.st_mode
-    )
+    _assert_denied(result)
 
 
 def test_cleanup_unlink_requires_parent_fd_and_inode_receipt(
@@ -1903,20 +2148,48 @@ def test_cleanup_unlink_requires_parent_fd_and_inode_receipt(
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
-    target = case.workspace.root / "ignored" / "input.txt"
+    original_link = module.os.link
+    original_unlink = module.os.unlink
+    original_open = module.os.open
+    original_fsync = module.os.fsync
     replacement = b"replacement-before-cleanup\n"
+    replacement_status: os.stat_result | None = None
+    published = False
+    unlink_calls: list[tuple[object, object]] = []
 
-    def replace_target_and_fail(
-        path: object,
-        mode: int,
+    def replace_published_inode(
+        source: object,
+        target: object,
         *args: object,
         **kwargs: object,
     ) -> None:
-        target.unlink()
-        target.write_bytes(replacement)
-        raise OSError("controlled failure after replacement")
+        nonlocal published, replacement_status
+        original_link(source, target, *args, **kwargs)
+        replacement_status = _descriptor_replace(
+            original_unlink=original_unlink,
+            original_open=original_open,
+            parent_fd=kwargs["dst_dir_fd"],
+            name=os.fspath(target),
+            content=replacement,
+        )
+        published = True
 
-    monkeypatch.setattr(module.os, "chmod", replace_target_and_fail)
+    def fail_after_publish(descriptor: int) -> None:
+        if published:
+            raise OSError("controlled post-publish failure")
+        original_fsync(descriptor)
+
+    def record_descriptor_unlink(
+        path: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        unlink_calls.append((path, kwargs.get("dir_fd")))
+        original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "link", replace_published_inode)
+    monkeypatch.setattr(module.os, "fsync", fail_after_publish)
+    monkeypatch.setattr(module.os, "unlink", record_descriptor_unlink)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1925,10 +2198,13 @@ def test_cleanup_unlink_requires_parent_fd_and_inode_receipt(
         authority=case.authority,
     )
 
+    target = case.workspace.root / "ignored" / "input.txt"
     _assert_denied(result)
+    assert replacement_status is not None
     assert target.exists()
     assert target.read_bytes() == replacement
-    assert result.reason == "IGNORED_INPUT_CLEANUP_FAILED"
+    assert target.stat().st_ino == replacement_status.st_ino
+    assert all(dir_fd is not None for _, dir_fd in unlink_calls)
     assert result.cleanup_complete is False
 
 
@@ -1944,22 +2220,22 @@ def test_directory_cleanup_cannot_follow_replaced_parent_path(
     original_open = module.os.open
     replaced = False
 
-    def replace_parent_before_temporary_open(
+    def replace_parent_at_descriptor_boundary(
         path: object,
         flags: int,
         *args: object,
         **kwargs: object,
-    ):
+    ) -> int:
         nonlocal replaced
-        if flags & os.O_CREAT and not replaced:
+        if flags & os.O_CREAT and kwargs.get("dir_fd") is not None and not replaced:
             replaced = True
-            parent.rename(moved_parent)
-            parent.mkdir()
+            os.rename(parent, moved_parent)
+            os.mkdir(parent)
             replacement_marker.write_bytes(b"replacement-tree\n")
-            raise OSError("controlled temporary creation failure")
+            raise OSError("controlled descriptor-relative open failure")
         return original_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(module.os, "open", replace_parent_before_temporary_open)
+    monkeypatch.setattr(module.os, "open", replace_parent_at_descriptor_boundary)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1980,24 +2256,19 @@ def test_root_descriptor_authority_remains_continuous(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = _valid_case(tmp_path)
-    replacement = _replacement_repository(
-        tmp_path,
-        case.repository.ignored.read_bytes(),
-    )
     module = importlib.import_module("coding_harness.workspace.ignored")
     original_open = module.os.open
     original_close = module.os.close
     source_descriptors: set[int] = set()
     source_root_opens = 0
-    replaced = False
-    saved = tmp_path / "continuous-authority-original"
+    closed_before_ignore = False
 
     def track_source_root(
         path: object,
         flags: int,
         *args: object,
         **kwargs: object,
-    ):
+    ) -> int:
         nonlocal source_root_opens
         descriptor = original_open(path, flags, *args, **kwargs)
         if Path(path) == case.repository.root:
@@ -2005,16 +2276,15 @@ def test_root_descriptor_authority_remains_continuous(
             source_descriptors.add(descriptor)
         return descriptor
 
-    def replace_on_first_source_close(descriptor: int) -> None:
-        nonlocal replaced
+    def track_source_close(descriptor: int) -> None:
+        nonlocal closed_before_ignore
+        if descriptor in source_descriptors:
+            closed_before_ignore = True
+            source_descriptors.remove(descriptor)
         original_close(descriptor)
-        if descriptor in source_descriptors and not replaced:
-            replaced = True
-            case.repository.root.rename(saved)
-            replacement.root.rename(case.repository.root)
 
     monkeypatch.setattr(module.os, "open", track_source_root)
-    monkeypatch.setattr(module.os, "close", replace_on_first_source_close)
+    monkeypatch.setattr(module.os, "close", track_source_close)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -2023,6 +2293,6 @@ def test_root_descriptor_authority_remains_continuous(
         authority=case.authority,
     )
 
-    assert replaced is True
     assert source_root_opens == 1
-    _assert_denied(result)
+    assert closed_before_ignore is False
+    _assert_pending_persistence_contract(result, case.authority)
