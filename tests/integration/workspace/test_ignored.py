@@ -152,6 +152,52 @@ def _policy_record(
     )
 
 
+def _canonical_expected_identity(
+    *,
+    baseline: BaselineManifest,
+    path: str,
+    kind: str,
+    size: int,
+    content_digest: str,
+    mode: str,
+    idempotency_key: str,
+    previous_manifest: object = None,
+) -> str:
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    previous = (
+        None
+        if previous_manifest is None
+        else module.PreviousSandboxInputManifestRef(
+            revision=previous_manifest.revision,
+            identity=previous_manifest.identity,
+            digest=previous_manifest.digest,
+        )
+    )
+    result = module.compute_expected_manifest_identity(
+        module.ExpectedManifestIdentityRequest(
+            task_id="task:1",
+            plan_version_identity="plan:1",
+            baseline_digest=baseline.digest,
+            previous_manifest=previous,
+            new_revision=1 if previous is None else previous.revision + 1,
+            entries=(
+                module.ExpectedManifestEntry(
+                    source=RepoPath.parse(path),
+                    kind=module.IgnoredInputKind(kind),
+                    approved_size=size,
+                    content_digest=content_digest,
+                    mode=module.IgnoredInputMode(mode),
+                    allowed_stages=("EXECUTING",),
+                ),
+            ),
+            idempotency_key=idempotency_key,
+            max_input_count=1,
+            max_input_bytes=size,
+        )
+    )
+    return result.expected_manifest_identity
+
+
 def _authority(
     *,
     baseline: BaselineManifest,
@@ -160,9 +206,22 @@ def _authority(
     size: int,
     content_digest: str,
     mode: str = _READ_ONLY,
-    manifest_identity: str = "sandbox-manifest:1",
+    manifest_identity: str | None = None,
     action_id: str = "action:ignored:1",
+    previous_manifest: object = None,
 ) -> SimpleNamespace:
+    idempotency_key = "ignored:key:" + action_id
+    if manifest_identity is None:
+        manifest_identity = _canonical_expected_identity(
+            baseline=baseline,
+            path=path,
+            kind=kind,
+            size=size,
+            content_digest=content_digest,
+            mode=mode,
+            idempotency_key=idempotency_key,
+            previous_manifest=previous_manifest,
+        )
     request_digest = _digest(
         "\0".join(
             (
@@ -176,7 +235,6 @@ def _authority(
             )
         ).encode()
     )
-    idempotency_key = "ignored:key:" + action_id
     policy = _policy_record(
         action_id=action_id,
         request_digest=request_digest,
@@ -306,7 +364,7 @@ def _valid_case(
     tmp_path: Path,
     *,
     mode: str = _READ_ONLY,
-    manifest_identity: str = "sandbox-manifest:1",
+    manifest_identity: str | None = None,
 ) -> SimpleNamespace:
     api = _api()
     repository = _repository(tmp_path)
@@ -532,7 +590,7 @@ def test_approval_binding_drift_fails_closed(
 
 
 def test_manifest_version_changes_after_consumption(tmp_path: Path) -> None:
-    case = _valid_case(tmp_path, manifest_identity="sandbox-manifest:1")
+    case = _valid_case(tmp_path)
     first = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -549,8 +607,8 @@ def test_manifest_version_changes_after_consumption(tmp_path: Path) -> None:
         size=len(second_source.read_bytes()),
         content_digest=_digest(second_source.read_bytes()),
         mode=_READ_ONLY,
-        manifest_identity="sandbox-manifest:2",
         action_id="action:ignored:2",
+        previous_manifest=first.manifest,
     )
     second = _invoke(
         case.api,
@@ -625,6 +683,7 @@ def test_invalid_ignored_input_fails_closed(
             kind="regular_file",
             size=1,
             content_digest=_digest(b"x"),
+            manifest_identity="sandbox-manifest:invalid-out-of-bounds",
         )
     elif category == "over-limit":
         overrides["max_input_bytes"] = 1
@@ -643,6 +702,7 @@ def test_invalid_ignored_input_fails_closed(
             kind="fifo",
             size=0,
             content_digest=_digest(b""),
+            manifest_identity="sandbox-manifest:invalid-special-file",
         )
     result = _invoke(
         case.api,
@@ -947,7 +1007,7 @@ def test_remediation_i2_preexisting_directory_is_preserved(
 def test_remediation_i3_previous_manifest_drift_changes_expected_identity(
     tmp_path: Path,
 ) -> None:
-    case = _valid_case(tmp_path, manifest_identity="sandbox-manifest:genesis")
+    case = _valid_case(tmp_path)
     genesis = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -963,8 +1023,8 @@ def test_remediation_i3_previous_manifest_drift_changes_expected_identity(
         kind="regular_file",
         size=len(second_source.read_bytes()),
         content_digest=_digest(second_source.read_bytes()),
-        manifest_identity="sandbox-manifest:next",
         action_id="action:ignored:next",
+        previous_manifest=genesis.manifest,
     )
     second_workspace = materialize_workspace(
         case.baseline,
@@ -995,7 +1055,7 @@ def test_remediation_i3_previous_manifest_drift_changes_expected_identity(
 def test_remediation_i3_approval_revision_drift_rejected_without_identity_rewrite(
     tmp_path: Path,
 ) -> None:
-    case = _valid_case(tmp_path, manifest_identity="sandbox-manifest:expected")
+    case = _valid_case(tmp_path)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1006,7 +1066,10 @@ def test_remediation_i3_approval_revision_drift_rejected_without_identity_rewrit
     )
 
     _assert_denied(result)
-    assert result.expected_manifest_identity == "sandbox-manifest:expected"
+    assert (
+        result.expected_manifest_identity
+        == case.authority.approval.sandbox_manifest_identity
+    )
     assert result.candidate_manifest is None
 
 
