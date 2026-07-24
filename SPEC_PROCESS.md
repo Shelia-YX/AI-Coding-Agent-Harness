@@ -369,3 +369,47 @@
 - 本次仅修改 `SPEC_PROCESS.md` 与 `AGENT_LOG.md`，不修改 `SPEC.md`、`PLAN.md`、产品代码或测试。
 - 本次不创建 GitHub Release，不创建 WebUI、WP-10 文件或其他交付制品。
 - 本次不创建 commit，不改写 Git 历史，也不进入 WP-10 implementation。
+
+## WP-10 `build_baseline` Ownership Clarification
+
+本节记录时间为 `2026-07-24 10:53:29 +0800 (Asia/Shanghai)`，是 WP-10 进入 Red/implementation 前的同期接口 ownership 澄清。
+
+### Ambiguity
+
+- `SPEC.md` 附录 D.4 将 `build_baseline` 定义为 Harness Internal Operation。【VERIFIED】
+- `PLAN.md` 的 WP-10 接口仅列出 `BaselineManifest`、`TaskWorkspace` 和 `materialize_workspace`，且 PLAN 全文未将 `build_baseline` 分配给其他 WP。【VERIFIED】
+
+### Approved Decision 与边界
+
+- 用户权威决定 `build_baseline` 由 WP-10 拥有。【APPROVED DECISION】
+- WP-10 拥有 `build_baseline`、`BaselineManifest`、`TaskWorkspace` 和 `materialize_workspace`。
+- WP-23 仅拥有 `TaskService` 的 application orchestration；它可以在后续任务启动流程中调用 `build_baseline`，但不重新实现或拥有 Baseline 构建规则。
+- WP-11～14 仅消费 WP-10 产生的 Baseline/Task Workspace 输出，并保持各自既有 Requirement/PV 与文件 ownership。
+
+### Non-change
+
+- 本澄清不修改 `SPEC.md` 或 `PLAN.md`，不改变任何 Requirement/PV ownership。
+- 本澄清仅补齐冻结 SPEC operation 与 PLAN WP-10 既有领域/文件范围之间的接口归属，不新增产品语义。
+- 本轮不创建 `build_baseline` 接口，不修改产品代码或测试，不进入 Red/implementation。
+
+### WP-10 Red 阶段证据
+
+本段于 `2026-07-24 11:13:49 +0800 (Asia/Shanghai)` 同期补录 WP-10 Red 阶段证据，不表示 WP-10 已实现或完成。
+
+#### VERIFIED
+
+- Red 测试文件 `tests/integration/workspace/test_baseline.py` 已创建；当前 SHA-256 为 `b8d0dae4b6265c9f1a1440e6f9076239804d950d889362bf1e07ebb2d3306fbe`。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider --collect-only tests/integration/workspace/test_baseline.py -q` 成功收集 `14` 个节点，退出码为 `0`。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider tests/integration/workspace/test_baseline.py -q` 执行完整 Red，结果为 `14 collected / 0 passed / 14 failed / 0 errors`，退出码为 `1`。
+- 全部失败均由测试内部转换为固定的 `WP-10 production API is not implemented`，对应缺少 `coding_harness.workspace.manifest` 及尚未实现的 WP-10 API；没有 collection、fixture、syntax 或环境错误。
+- 当前 `src/` 无差异，staged 为空；未创建临时 production/mock implementation，未进入 Green。
+
+#### USER_REPORTED
+
+- 用户确认当前阶段为 `WP10_RED_EXECUTION_COMPLETE`，并批准将 `14` 个失败分类为 `EXPECTED_RED`。
+
+#### UNKNOWN
+
+- 后续 production 实现、Green、回归、review、commit、push 与 PR 的结果均尚不存在，不能提前记录。
+
+本证据不关闭 WS-001、WS-006～009 或对应 PV，也不改变其状态。
