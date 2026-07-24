@@ -1,0 +1,199 @@
+{
+  "fixture_schema": "wp11-identity-v1-evidence:1",
+  "identity_algorithm": {
+    "name": "typed-length-prefixed-binary-sha256",
+    "status": "approved",
+    "version": 1
+  },
+  "evidence": {
+    "candidate_input_sha256": "aa2cee0e4c2c3daaf508f6be9421d4597ee2e52dc98d256a984dd262f837066d",
+    "decoder_conformance": "DEFERRED_TO_DECODER_CONFORMANCE_TESTS / OUT_OF_SCOPE_FOR_VECTOR_FREEZE",
+    "encoder_a_sha256": "89b3e6cc65eb6bf50ce802ddd8a78b10bf435c293e9723aed22020623f5f9d9b",
+    "oracle_b_sha256": "2eb1d38cb13280f2a5cc03c3ae046f948c42de42cc8f28bbc706b1fe24217d26",
+    "reproducibility_rerun": "DEFERRED: scripts do not support a non-overwriting output root",
+    "review_status": "CANDIDATE_DIGESTS_APPROVED"
+  },
+  "vectors": [
+    {
+      "id": "genesis-minimal",
+      "input": {
+        "task_id": "task:vector:genesis",
+        "plan_version_identity": "plan:vector:1",
+        "baseline_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+        "previous": {
+          "variant": "genesis"
+        },
+        "new_revision": 1,
+        "entries": [
+          {
+            "source_repo_path": "ignored/input.txt",
+            "file_type": "regular_file",
+            "approved_size": 6,
+            "content_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "mode": "read_only_input",
+            "allowed_stages": [
+              "EXECUTING"
+            ]
+          }
+        ],
+        "idempotency_key": "ignored:vector:genesis",
+        "validation_limits": {
+          "max_input_count": 1,
+          "max_input_bytes": 6
+        }
+      },
+      "derived": {
+        "classification": "audit evidence only; not builder input",
+        "destinations": [
+          {
+            "source_repo_path": "ignored/input.txt",
+            "destination_repo_path": "ignored/input.txt"
+          }
+        ],
+        "canonical_entry_order": [
+          "ignored/input.txt"
+        ],
+        "canonical_stage_order": [
+          [
+            "EXECUTING"
+          ]
+        ]
+      },
+      "expected": {
+        "workspace_logical_identity": "38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f",
+        "expected_manifest_identity": "e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5",
+        "workspace_canonical_stream_length": 119,
+        "canonical_stream_length": 332
+      }
+    },
+    {
+      "id": "genesis-multi",
+      "input": {
+        "task_id": "task:vector:multi",
+        "plan_version_identity": "plan:vector:2",
+        "baseline_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "previous": {
+          "variant": "genesis"
+        },
+        "new_revision": 1,
+        "entries": [
+          {
+            "source_repo_path": "ignored/z.txt",
+            "file_type": "regular_file",
+            "approved_size": 9,
+            "content_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mode": "writable_ephemeral",
+            "allowed_stages": [
+              "EXECUTING",
+              "VERIFYING"
+            ]
+          },
+          {
+            "source_repo_path": "ignored/a.txt",
+            "file_type": "regular_file",
+            "approved_size": 3,
+            "content_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "mode": "writable_ephemeral",
+            "allowed_stages": [
+              "EXECUTING",
+              "VERIFYING"
+            ]
+          }
+        ],
+        "idempotency_key": "ignored:vector:multi",
+        "validation_limits": {
+          "max_input_count": 2,
+          "max_input_bytes": 12
+        }
+      },
+      "derived": {
+        "classification": "audit evidence only; not builder input",
+        "destinations": [
+          {
+            "source_repo_path": "ignored/a.txt",
+            "destination_repo_path": "ignored/a.txt"
+          },
+          {
+            "source_repo_path": "ignored/z.txt",
+            "destination_repo_path": "ignored/z.txt"
+          }
+        ],
+        "canonical_entry_order": [
+          "ignored/a.txt",
+          "ignored/z.txt"
+        ],
+        "canonical_stage_order": [
+          [
+            "EXECUTING",
+            "VERIFYING"
+          ],
+          [
+            "EXECUTING",
+            "VERIFYING"
+          ]
+        ]
+      },
+      "expected": {
+        "workspace_logical_identity": "8d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf27",
+        "expected_manifest_identity": "aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b5",
+        "workspace_canonical_stream_length": 117,
+        "canonical_stream_length": 471
+      }
+    },
+    {
+      "id": "continuation-single-entry",
+      "input": {
+        "task_id": "task:vector:continuation",
+        "plan_version_identity": "plan:vector:3",
+        "baseline_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+        "previous": {
+          "variant": "continuation",
+          "revision": 1,
+          "identity": "5555555555555555555555555555555555555555555555555555555555555555",
+          "digest": "6666666666666666666666666666666666666666666666666666666666666666"
+        },
+        "new_revision": 2,
+        "entries": [
+          {
+            "source_repo_path": "ignored/next.txt",
+            "file_type": "regular_file",
+            "approved_size": 12,
+            "content_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+            "mode": "read_only_input",
+            "allowed_stages": [
+              "EXECUTING"
+            ]
+          }
+        ],
+        "idempotency_key": "ignored:vector:continuation",
+        "validation_limits": {
+          "max_input_count": 1,
+          "max_input_bytes": 12
+        }
+      },
+      "derived": {
+        "classification": "audit evidence only; not builder input",
+        "destinations": [
+          {
+            "source_repo_path": "ignored/next.txt",
+            "destination_repo_path": "ignored/next.txt"
+          }
+        ],
+        "canonical_entry_order": [
+          "ignored/next.txt"
+        ],
+        "canonical_stage_order": [
+          [
+            "EXECUTING"
+          ]
+        ]
+      },
+      "expected": {
+        "workspace_logical_identity": "86ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0",
+        "expected_manifest_identity": "8c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9",
+        "workspace_canonical_stream_length": 124,
+        "canonical_stream_length": 409
+      }
+    }
+  ]
+}

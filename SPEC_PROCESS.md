@@ -859,3 +859,32 @@
 - I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。
 - Test-contract revision 尚未开始，production remediation 保持暂停；未进入 PR 或 WP-12。
 - 本次不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不生成 vector digest，不 stage、commit 或 push。
+
+### WP-11 Identity v1 规范向量证据冻结
+
+本段于 `2026-07-24 16:53:07 +0800 (Asia/Shanghai)` 同期记录 `WP11_NORMATIVE_VECTOR_EVIDENCE_FREEZE`。候选审查裁决为 `CANDIDATE_DIGESTS_APPROVED`；本次只把批准的 exact values 与 Vector 1 annotation 固化为证据，不修改测试合同或 production builder。
+
+#### 冻结文件与来源
+
+- 规范向量证据容器：`tests/fixtures/workspace/wp11_identity_v1_vectors.json`。
+- Vector 1 人工审查证据：`tests/fixtures/workspace/wp11_identity_v1_vector1.annotated.txt`。
+- Candidate input SHA-256：`aa2cee0e4c2c3daaf508f6be9421d4597ee2e52dc98d256a984dd262f837066d`。
+- Encoder A SHA-256：`89b3e6cc65eb6bf50ce802ddd8a78b10bf435c293e9723aed22020623f5f9d9b`。
+- Independent Oracle B SHA-256：`2eb1d38cb13280f2a5cc03c3ae046f948c42de42cc8f28bbc706b1fe24217d26`。
+- JSON 仅为 evidence container，不是 identity canonical serialization；`derived` 明确为 audit evidence only、not builder input。
+
+#### Frozen exact values
+
+| Vector | Workspace stream length | `workspace_logical_identity` | Expected stream length | `expected_manifest_identity` |
+|---|---:|---|---:|---|
+| `genesis-minimal` | 119 | `38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f` | 332 | `e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5` |
+| `genesis-multi` | 117 | `8d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf27` | 471 | `aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b5` |
+| `continuation-single-entry` | 124 | `86ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0` | 409 | `8c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9` |
+
+#### Review evidence 与边界
+
+- Encoder A 与独立 Oracle B 的三个 base vectors、十三个合法 mutations 均为 byte-for-byte `PASS`；Vector 1 人工 byte-stream/offset review 为 `PASS`。
+- Validation-limit non-binding 为 `PASS`；二十二个 abstract invalid 均 fail-before-hash 且不产生 stream/digest；五个 fixture-conformance invalid 由 comparison/reviewer 层检查。
+- Decoder conformance 为 `DEFERRED_TO_DECODER_CONFORMANCE_TESTS`、`OUT_OF_SCOPE_FOR_VECTOR_FREEZE`，不得据此声称 wire-invalid 已验证。
+- Reproducibility rerun 为 `DEFERRED`，原因是 candidate scripts 不支持 non-overwriting output root；该延期不等于 reproducibility `PASS`。
+- Candidate scripts 本身不进入仓库。本次冻结不开始 test-contract revision，不继续 production remediation；I-1 保持 `CLOSED`，I-2、I-3、I-4 保持 `OPEN`，未进入 PR 或 WP-12。
