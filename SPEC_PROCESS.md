@@ -773,3 +773,36 @@
 - 本轮新增 Red 时 production 未变化；既有 `src/coding_harness/workspace/ignored.py` 第一轮 remediation working diff 保持未提交，其 diff SHA-256 指纹仍为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
 - Round-2 production remediation 尚未授权；未进入 PR 或 WP-12，未修改 WP-07、WP-09、WP-10 或冻结 `SPEC.md`/`PLAN.md`。
 - 当前状态：`WP11_RESIDUAL_RED_EXECUTION_COMPLETE`。
+
+### WP-11 Residual Test Contract Conflict 与合法停止
+
+本段于 `2026-07-24 15:25:24 +0800 (Asia/Shanghai)` 同期记录第二轮 production remediation 开始前发现的测试合同冲突。停止状态为 `STOPPED_FOR_WP11_RESIDUAL_TEST_CONTRACT_CONFLICT`；本次停止不授权弱化 production security。
+
+#### I-3 conflict
+
+- 部分既有测试将任意字符串 `sandbox-manifest:1`、`sandbox-manifest:genesis`、`sandbox-manifest:next` 作为 Approval 的 sandbox manifest identity，同时要求 WP-11 从稳定请求字段独立、确定性计算 expected identity。
+- 两项要求无法同时成立，除非实现继续将 Approval 值作为 identity 事实来源，或对测试字符串进行硬编码；两种做法均违反已冻结的整改设计。
+- 正确合同为：
+
+  `computed_expected_identity = deterministic stable-request hash`
+
+  `approval.sandbox_manifest_identity = approval-frozen expected identity`
+
+  `computed_expected_identity == approval.sandbox_manifest_identity`
+
+- Approval revision 漂移不得重写 computed expected identity；对应测试必须使用规范计算出的 expected identity，而不是任意调用方字符串。
+
+#### I-4 conflict
+
+- 部分既有测试通过 monkeypatch 路径式 `os.chmod(target_path)` 注入失败或路径替换，并要求该不安全 API 实际执行。
+- 整改合同要求移除发布后的路径式 chmod，改为发布前对 owned temporary descriptor 执行 `os.fchmod()`。
+- 测试不得以不安全 API 被调用作为成功前提；后续获批修订应在 descriptor-safe 原语上注入失败，或断言竞争替换对象的 mode/content 均未被修改。
+
+#### Classification、完整性与 gate
+
+- 该问题分类为 test contract defect，不是允许弱化 production security；当前 `82` 项测试不能全部继续视为冻结的正确合同。
+- 后续仅冲突节点可在明确审批后修订；未冲突测试继续保持冻结。
+- I-1 保持 CLOSED；I-2、I-3、I-4 保持 OPEN。Round-2 production remediation 暂停，未进入 PR 或 WP-12。
+- 既有 `src/coding_harness/workspace/ignored.py` working diff 不得丢失、reset、stash、stage 或提交；其当前 diff SHA-256 指纹为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
+- `tests/integration/workspace/test_ignored.py` 当前 SHA-256 为 `9eb659dbc95b2017d23eba0f57a7e41cbbdb3ccbb0f880d0862bb6fe8a4e28ce`。
+- 本次仅记录冲突和合法停止事件，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`。
