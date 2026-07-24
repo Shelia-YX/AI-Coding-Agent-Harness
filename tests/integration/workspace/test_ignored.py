@@ -689,3 +689,655 @@ def test_spec_requirement(tmp_path: Path, requirement_id: str) -> None:
     else:
         assert result.manifest.entries[0].writeback_permitted is False
         assert result.manifest.entries[0].exportable_to_llm is False
+
+
+def _assert_pending_persistence_contract(result: object, authority: object) -> None:
+    state = result.state.value if hasattr(result.state, "value") else result.state
+    assert state == "PUBLISHED_PENDING_COMMIT"
+    assert result.persistence_committed is False
+    assert result.active_manifest is None
+    assert result.candidate_manifest is not None
+    assert (
+        result.candidate_manifest.identity
+        == authority.approval.sandbox_manifest_identity
+    )
+    assert result.approval_cas_intent.previous_revision == authority.approval.revision
+    assert result.approval_cas_intent.expected_revision == authority.approval.revision
+    assert result.approval_cas_intent.new_revision == authority.approval.revision + 1
+
+
+def test_remediation_i1_materialization_failure_preserves_original_approval_revision(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+        max_input_bytes=1,
+    )
+
+    _assert_denied(result)
+    assert result.approval_result.approval is case.authority.approval
+    assert result.approval_result.approval.revision == 1
+    assert result.approval_result.new_revision is None
+
+
+def test_remediation_i1_materialization_failure_does_not_return_consumed_approval(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+        max_input_count=0,
+    )
+
+    _assert_denied(result)
+    assert result.approval_result.approval.consumed is False
+    assert result.approval_cas_intent is None
+
+
+def test_remediation_i1_success_returns_pending_commit_with_exact_cas_binding(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_pending_persistence_contract(result, case.authority)
+
+
+def test_remediation_i1_replay_or_stale_revision_fails_closed(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+        expected_revision=case.authority.approval.revision + 1,
+    )
+
+    _assert_denied(result)
+    assert result.persistence_committed is False
+    assert result.active_manifest is None
+    assert result.candidate_manifest is None
+    assert result.approval_cas_intent is None
+
+
+def test_remediation_i1_candidate_manifest_not_active_before_persistence_commit(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_pending_persistence_contract(result, case.authority)
+    assert result.candidate_manifest.exportable_to_llm is False
+    assert result.active_manifest is None
+    assert result.execution_permitted is False
+    assert result.changeset_permitted is False
+    assert result.export_permitted is False
+
+
+def test_remediation_i2_failure_after_directory_creation_removes_only_owned_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    source = case.repository.root / "ignored" / "new" / "deep" / "input.txt"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"nested\n")
+    authority = _authority(
+        baseline=case.baseline,
+        path="ignored/new/deep/input.txt",
+        kind="regular_file",
+        size=len(source.read_bytes()),
+        content_digest=_digest(source.read_bytes()),
+    )
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    original_open = module.os.open
+
+    def fail_destination_open(path: object, flags: int, *args: object, **kwargs: object):
+        if flags & os.O_CREAT:
+            raise OSError("injected destination open failure")
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "open", fail_destination_open)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=authority,
+    )
+
+    _assert_denied(result)
+    assert not os.path.lexists(case.workspace.root / "ignored")
+    assert result.cleanup_complete is True
+    assert result.cleanup_reason is None
+
+
+def test_remediation_i2_failure_after_write_removes_owned_temporary_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    target = case.workspace.root / "ignored" / "input.txt"
+    original_chmod = module.os.chmod
+
+    def fail_target_chmod(path: object, mode: int, *args: object, **kwargs: object):
+        if Path(path) == target:
+            raise OSError("injected chmod failure")
+        return original_chmod(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "chmod", fail_target_chmod)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert not os.path.lexists(target)
+    assert not tuple(case.workspace.root.rglob(".wp11-ignored-*"))
+    assert result.cleanup_complete is True
+
+
+def test_remediation_i2_cleanup_failure_returns_stable_fail_closed_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    target = case.workspace.root / "ignored" / "input.txt"
+    original_chmod = module.os.chmod
+    original_unlink = Path.unlink
+
+    def fail_target_chmod(path: object, mode: int, *args: object, **kwargs: object):
+        if Path(path) == target:
+            raise OSError("injected chmod failure")
+        return original_chmod(path, mode, *args, **kwargs)
+
+    def fail_target_unlink(path: Path, *args: object, **kwargs: object):
+        if path == target:
+            raise OSError("injected cleanup failure")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "chmod", fail_target_chmod)
+    monkeypatch.setattr(Path, "unlink", fail_target_unlink)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_CLEANUP_FAILED"
+    assert result.cleanup_complete is False
+    assert result.operation_reason == "IGNORED_INPUT_MATERIALIZATION_FAILED"
+    assert result.active_manifest is None
+
+
+def test_remediation_i2_preexisting_directory_is_preserved(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    existing = case.workspace.root / "ignored"
+    existing.mkdir()
+    marker = existing / "preexisting.txt"
+    marker.write_bytes(b"keep\n")
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    original_open = module.os.open
+
+    def fail_destination_open(path: object, flags: int, *args: object, **kwargs: object):
+        if flags & os.O_CREAT:
+            raise OSError("injected destination open failure")
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "open", fail_destination_open)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert existing.is_dir()
+    assert marker.read_bytes() == b"keep\n"
+    assert result.cleanup_complete is True
+
+
+def test_remediation_i3_previous_manifest_drift_changes_expected_identity(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path, manifest_identity="sandbox-manifest:genesis")
+    genesis = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+    second_source = case.repository.root / "ignored" / "second.txt"
+    second_source.write_bytes(b"second\n")
+    authority = _authority(
+        baseline=case.baseline,
+        path="ignored/second.txt",
+        kind="regular_file",
+        size=len(second_source.read_bytes()),
+        content_digest=_digest(second_source.read_bytes()),
+        manifest_identity="sandbox-manifest:next",
+        action_id="action:ignored:next",
+    )
+    second_workspace = materialize_workspace(
+        case.baseline,
+        tmp_path / "second-task-workspace",
+    )
+    with_previous = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=authority,
+        current_manifest=genesis.manifest,
+    )
+    without_previous = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=second_workspace,
+        authority=authority,
+    )
+
+    assert (
+        with_previous.expected_manifest_identity
+        != without_previous.expected_manifest_identity
+    )
+
+
+def test_remediation_i3_approval_revision_drift_rejected_without_identity_rewrite(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path, manifest_identity="sandbox-manifest:expected")
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+        expected_revision=case.authority.approval.revision + 1,
+    )
+
+    _assert_denied(result)
+    assert result.expected_manifest_identity == "sandbox-manifest:expected"
+    assert result.candidate_manifest is None
+
+
+def test_remediation_i3_workspace_logical_binding_drift_fails_closed(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    drifted = TaskWorkspace(
+        root=case.workspace.root,
+        baseline_digest=case.workspace.baseline_digest,
+        source_head=case.workspace.source_head,
+        source_branch=case.workspace.source_branch,
+        source_index_digest=case.workspace.source_index_digest,
+        source_status_digest="f" * 64,
+    )
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=drifted,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_WORKSPACE_BINDING_MISMATCH"
+    assert result.candidate_manifest is None
+
+
+def test_remediation_i3_rematerialized_workspace_keeps_logical_identity(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    rematerialized = materialize_workspace(
+        case.baseline,
+        tmp_path / "rematerialized-task-workspace",
+    )
+    first = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+    second = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=rematerialized,
+        authority=case.authority,
+    )
+
+    assert first.workspace_logical_identity == second.workspace_logical_identity
+
+
+def test_remediation_i3_failed_materialization_produces_no_manifest_version(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+        max_input_bytes=1,
+    )
+
+    _assert_denied(result)
+    assert result.candidate_manifest is None
+    assert result.active_manifest is None
+    assert result.expected_manifest_identity is None
+
+
+def test_remediation_i3_actual_manifest_digest_binds_approval_cas_intent(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_pending_persistence_contract(result, case.authority)
+    assert (
+        result.candidate_manifest.approval_intent_digest
+        == result.approval_cas_intent.digest
+    )
+    assert result.candidate_manifest.digest != result.expected_manifest_identity
+
+
+def test_remediation_i4_intermediate_source_symlink_rejected(tmp_path: Path) -> None:
+    case = _valid_case(tmp_path)
+    real = case.repository.root / "real-ignored"
+    real.mkdir()
+    source = real / "input.txt"
+    source.write_bytes(b"linked-source\n")
+    alias = case.repository.root / "ignored" / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    authority = _authority(
+        baseline=case.baseline,
+        path="ignored/alias/input.txt",
+        kind="regular_file",
+        size=len(source.read_bytes()),
+        content_digest=_digest(source.read_bytes()),
+    )
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_SOURCE_CONTAINMENT_FAILED"
+
+
+def test_remediation_i4_destination_parent_replacement_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    destination_parent = case.workspace.root / "ignored"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    original_lstat = module.os.lstat
+    replaced = False
+
+    def replace_before_lstat(path: object, *args: object, **kwargs: object):
+        nonlocal replaced
+        if Path(path) == destination_parent and not replaced:
+            replaced = True
+            destination_parent.rmdir()
+            destination_parent.symlink_to(outside, target_is_directory=True)
+        return original_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "lstat", replace_before_lstat)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert not (outside / "input.txt").exists()
+    assert result.reason == "IGNORED_INPUT_DESTINATION_CONTAINMENT_FAILED"
+
+
+def test_remediation_i4_hardlink_source_rejected(tmp_path: Path) -> None:
+    case = _valid_case(tmp_path)
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_bytes(b"outside-secret\n")
+    hardlink = case.repository.root / "ignored" / "hardlink.txt"
+    os.link(outside, hardlink)
+    authority = _authority(
+        baseline=case.baseline,
+        path="ignored/hardlink.txt",
+        kind="regular_file",
+        size=len(hardlink.read_bytes()),
+        content_digest=_digest(hardlink.read_bytes()),
+    )
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_HARDLINK_REJECTED"
+    assert not (case.workspace.root / "ignored" / "hardlink.txt").exists()
+
+
+def test_remediation_i4_source_mutation_during_read_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    original_read = module.os.read
+    mutated = False
+
+    def mutate_after_read(descriptor: int, size: int) -> bytes:
+        nonlocal mutated
+        chunk = original_read(descriptor, size)
+        if chunk and not mutated:
+            mutated = True
+            case.repository.ignored.write_bytes(b"mutated-input\n")
+        return chunk
+
+    monkeypatch.setattr(module.os, "read", mutate_after_read)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_SOURCE_CHANGED"
+
+
+def test_remediation_i4_oversized_or_replaced_source_read_is_bounded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    original_read = module.os.read
+    requested: list[int] = []
+
+    def record_read_size(descriptor: int, size: int) -> bytes:
+        requested.append(size)
+        return original_read(descriptor, size)
+
+    monkeypatch.setattr(module.os, "read", record_read_size)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    assert requested
+    assert max(requested) <= len(case.repository.ignored.read_bytes()) + 1
+    _assert_pending_persistence_contract(result, case.authority)
+
+
+def test_remediation_i4_concurrent_target_creation_never_overwritten(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    target = case.workspace.root / "ignored" / "input.txt"
+    original_open = module.os.open
+    injected = False
+
+    def create_competing_target(
+        path: object,
+        flags: int,
+        *args: object,
+        **kwargs: object,
+    ):
+        nonlocal injected
+        if flags & os.O_CREAT and not injected:
+            injected = True
+            target.write_bytes(b"competitor\n")
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "open", create_competing_target)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert target.read_bytes() == b"competitor\n"
+    assert result.reason == "IGNORED_INPUT_TARGET_CONFLICT"
+
+
+def test_remediation_i4_existing_target_inode_and_content_preserved(
+    tmp_path: Path,
+) -> None:
+    case = _valid_case(tmp_path)
+    target = case.workspace.root / "ignored" / "input.txt"
+    target.parent.mkdir()
+    target.write_bytes(b"existing\n")
+    before = target.stat()
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    after = target.stat()
+    assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+    assert target.read_bytes() == b"existing\n"
+    assert result.reason == "IGNORED_INPUT_TARGET_CONFLICT"
+
+
+def test_remediation_i4_publish_failure_removes_owned_temporary_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    link_calls = 0
+
+    def fail_link(*args: object, **kwargs: object) -> None:
+        nonlocal link_calls
+        link_calls += 1
+        raise OSError("injected no-clobber publish failure")
+
+    monkeypatch.setattr(module.os, "link", fail_link)
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert link_calls == 1
+    assert not tuple(case.workspace.root.rglob(".wp11-ignored-*"))
+    assert not (case.workspace.root / "ignored" / "input.txt").exists()
+    assert result.cleanup_complete is True
+
+
+def test_remediation_i4_unsupported_no_clobber_primitive_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = _valid_case(tmp_path)
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    monkeypatch.setattr(module.os, "supports_dir_fd", set())
+    monkeypatch.setattr(module.os, "supports_follow_symlinks", set())
+    result = _invoke(
+        case.api,
+        source_root=case.repository.root,
+        baseline=case.baseline,
+        workspace=case.workspace,
+        authority=case.authority,
+    )
+
+    _assert_denied(result)
+    assert result.reason == "IGNORED_INPUT_NO_CLOBBER_UNSUPPORTED"
+    assert not (case.workspace.root / "ignored" / "input.txt").exists()

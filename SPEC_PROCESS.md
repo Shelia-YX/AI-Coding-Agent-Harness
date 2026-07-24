@@ -684,3 +684,29 @@
 - 下一阶段仅允许进入 `WP11_REMEDIATION_RED`，且只允许修改 `tests/integration/workspace/test_ignored.py`；production remediation 仍未授权。
 - I-1～I-4 尚未关闭；不得进入 merge preparation。
 - WP-12～WP-15、WP-23 均未进入，冻结 `SPEC.md`/`PLAN.md` 保持不变。
+
+### WP-11 Remediation Red 证据
+
+本段于 `2026-07-24 14:21:42 +0800 (Asia/Shanghai)` 同期记录 I-1～I-4 整改回归测试的合法 Red；production remediation 尚未授权。
+
+#### VERIFIED
+
+- `tests/integration/workspace/test_ignored.py` collect-only 成功：`61 collected / 0 collection errors`。
+- 原有 WP-11 tests 为 `37 passed`，无旧测试回归。
+- 新增整改 tests 为 `24` 个，完整执行结果为 `37 passed / 24 failed / 0 errors`。
+- 新增节点分类为 `EXPECTED_RED = 24`、unexpected pass `0`、errors `0`。
+- Finding 映射：I-1 为 `5` 个节点，I-2 为 `4` 个节点，I-3 为 `6` 个节点，I-4 为 `9` 个节点；四组新增节点均为 EXPECTED_RED。
+
+#### Failure classification
+
+- I-1：当前缺少 `PUBLISHED_PENDING_COMMIT`、candidate/active manifest 分离及精确 Approval CAS 组合合同。
+- I-2：当前缺少本次调用创建对象的 cleanup ownership、完成状态和稳定 cleanup failure result。
+- I-3：当前 manifest identity/digest 未完整绑定前序 manifest、Approval CAS intent 和 workspace logical binding。
+- I-4：当前未实现 descriptor-relative traversal、明确 hardlink policy、approved-size bounded I/O 和 `os.link()` no-clobber publication。
+
+#### Boundary
+
+- 本次仅修改 WP-11 test owner 文件；production、WP-07、WP-09、WP-10、冻结 `SPEC.md`/`PLAN.md` 均未修改。
+- I-1～I-4 仍保持 open；合法 Red 不表示 finding 已关闭。
+- Production remediation 尚未授权，未进入 WP-12～WP-15 或 WP-23。
+- 当前状态：`WP11_REMEDIATION_RED_EXECUTION_COMPLETE`。
