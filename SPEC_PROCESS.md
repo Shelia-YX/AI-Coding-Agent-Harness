@@ -581,3 +581,22 @@
 - Red 分类：`EXPECTED_RED = 37`，invalid Red 为 `0`。
 - 当前未实现 WP-07 Approval/Policy、WP-10 Baseline、WP-12 Synthetic Git、WP-13 Change Set 或 WP-14 Apply/recovery；未修改冻结 `SPEC.md`/`PLAN.md`。
 - 当前状态为 `WP11_RED_EXECUTION_COMPLETE`；未进入 Green、未 commit、未 push、未创建 PR。
+
+### WP-11 Green 实现证据
+
+本段于 `2026-07-24 13:38:32 +0800 (Asia/Shanghai)` 同期记录 WP-11 从合法 Red 到最小 Green 的实现与验证结果；当前等待 security/spec review，不表示已 commit、push、创建 PR 或 merge。
+
+#### VERIFIED
+
+- 新增 WP-11 owned production 文件 `src/coding_harness/workspace/ignored.py`。
+- 实现不可变 `SandboxInputManifest` 及其 version identity、revision、digest 与 baseline binding；实现 trusted Approval consumption gateway，复用 WP-07 `consume_approval` 的 trusted current record、Policy record、execution context 与 revision 校验。
+- materialization 对 approval binding、path、entry type、size、digest、用途、stage、manifest identity 和 limit 执行 fail-closed validation；只有匹配审批成功消费后才允许产生新 manifest version 和 workspace 副作用。
+- `read_only_input` 物化为只读任务副本，`writable_ephemeral` 物化为独立可写临时副本；两者均不可导出给 LLM，不具备 Change Set eligibility 或原仓库 writeback 权限。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider tests/integration/workspace/test_ignored.py -q`，结果为 `37 passed / 0 failed`，退出码 `0`。
+- WP-07 Approval/Policy、WP-10 `manifest.py`/`materialize.py`、冻结 `SPEC.md`/`PLAN.md` 均未修改。
+
+#### Current state
+
+- 状态：`WP11_GREEN_IMPLEMENTATION_COMPLETE`。
+- 当前新增 `ignored.py`，尚未 commit Green implementation。
+- 当前等待独立 security/spec review；未进入 WP-12、WP-13 或 WP-14。
