@@ -600,3 +600,44 @@
 - 状态：`WP11_GREEN_IMPLEMENTATION_COMPLETE`。
 - 当前新增 `ignored.py`，尚未 commit Green implementation。
 - 当前等待独立 security/spec review；未进入 WP-12、WP-13 或 WP-14。
+
+### WP-11 Security/Specification Review
+
+本段于 `2026-07-24 13:54:12 +0800 (Asia/Shanghai)` 同期记录对 commit `ab2efb1124dd600bd9c693c6f448140876716394` 的只读定向 review。Review 前重新运行 WP-11 定向测试，结果为 `37 passed in 1.81s`；测试通过不替代源码合同审查。
+
+#### Review result
+
+- Critical：`0`
+- Important：`4`
+- Minor：`0`
+- Decision：`CHANGES_REQUIRED`
+
+#### Findings
+
+- **I-1 — Approval consumption 与失败原子性（Important）**
+  - Contract：审批消费、CAS intent、WP-11 验证、文件物化和 manifest version 必须组成 fail-closed 合同；失败不得返回可被误认为已经成功消费的状态。
+  - Evidence：`consume_approval()` 先于 WP-11 专属 binding、源文件及物化校验执行；后续 `_denied()` 虽将 permitted/side-effect 改为 false，仍保留 consumed Approval 与新 revision。
+  - Required remediation：调整组合顺序或结果合同，使任何 WP-11 验证/物化失败保持原 Approval revision 和未消费状态；不得修改、复制或弱化 WP-07 authority。若 WP-07 public contract 无法支持该原子组合，必须重新暂停并进行接口裁决。
+  - Test gap：现有 tests 未断言消费成功之后的 WP-11 binding/materialization failure 不返回 consumed record/CAS intent。
+- **I-2 — 文件副作用失败原子性（Important）**
+  - Contract：任一物化失败不得残留本次创建的文件或目录，不得推进 manifest，不得返回成功 workspace binding。
+  - Evidence：`_write_copy()` 创建目录后存在直接 false-return 路径；写后内容比较为 false 时可能保留目标文件，现有清理路径未统一覆盖全部失败分支。
+  - Required remediation：建立单一可验证的 cleanup/finalize 路径，清除本次创建的文件与目录；清理结果不确定时返回稳定 fail-closed cleanup 状态。
+  - Test gap：现有 tests 只覆盖写入前拒绝，未覆盖部分目录/文件已创建后的失败与清理。
+- **I-3 — SandboxInputManifest 完整绑定（Important）**
+  - Contract：manifest identity/digest 必须完整绑定前序 manifest、consumed Approval revision/CAS intent、source metadata/content、mode 和 materialized workspace binding。
+  - Evidence：当前 digest 只覆盖当前 identity、revision、baseline 和 entries，未覆盖前序 manifest identity/digest、Approval identity/revision 或 TaskWorkspace binding。
+  - Required remediation：扩充 immutable manifest contract 和确定性 digest，加入前序版本、可信 approval consumption 及 workspace identity/binding，并验证任一字段漂移 fail closed。
+  - Test gap：现有 version/digest tests 未覆盖上述绑定字段漂移或不同历史错误产生等价 identity 的情况。
+- **I-4 — Path/file safety 与 bounded failure（Important）**
+  - Contract：source/destination 必须保持 lexical/physical containment，抵抗 symlink/hardlink/path replacement/TOCTOU，且所有读取有界。
+  - Evidence：source 中间目录采用 `lstat` 后再按路径打开，`O_NOFOLLOW` 只保护最终分量；未定义 hardlink 拒绝；destination 直接信任可构造的 `TaskWorkspace.root`，父目录检查存在替换窗口；写后 `Path.read_bytes()` 可能在竞争替换后无界读取。
+  - Required remediation：采用 descriptor-relative no-follow traversal 或等价受控根机制，验证 workspace root authority/physical containment，明确 hardlink 策略，并以已打开 descriptor 进行有界写后验证。
+  - Test gap：现有 tests 未覆盖中间目录替换、hardlink、伪造 workspace root、destination race 或写后无界替换。
+
+#### Gate 与边界
+
+- WP-11 当前不得进入 merge preparation，production 修复尚未获准。
+- I-1 整改不得修改或复制 WP-07 Approval/Policy authority；如公共合同不足，必须先停止并裁决接口 ownership。
+- 本次只记录 review，不修改 production/tests、冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push 或创建 PR。
+- WP-12、WP-13、WP-14 均未开始。
