@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import hashlib
 import os
 from pathlib import Path
+import selectors
 import stat
 import subprocess
+import time
 
 from coding_harness.workspace.file_model import (
     InspectionStatus,
@@ -20,6 +23,9 @@ from coding_harness.workspace.paths import RepoPath
 
 
 _GIT_TIMEOUT_SECONDS = 5.0
+_GIT_CLEANUP_TIMEOUT_SECONDS = 0.5
+_MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024
+_MAX_GIT_TEXT_BYTES = 4096
 _INVALID_BASELINE = "baseline construction failed"
 
 
@@ -45,6 +51,17 @@ def _update_field(digest: object, value: str | bytes) -> None:
     digest.update(encoded)
 
 
+class BaselineEntryState(Enum):
+    TRACKED_CLEAN = "TRACKED_CLEAN"
+    TRACKED_STAGED = "TRACKED_STAGED"
+    TRACKED_UNSTAGED = "TRACKED_UNSTAGED"
+    TRACKED_MIXED = "TRACKED_MIXED"
+    UNTRACKED = "UNTRACKED"
+
+    def __bool__(self) -> bool:
+        raise TypeError("BaselineEntryState has no truth value")
+
+
 @dataclass(frozen=True, slots=True)
 class BaselineEntry:
     """One immutable entry captured from the task-start filesystem state."""
@@ -56,6 +73,7 @@ class BaselineEntry:
     file_identity: str
     kind: SupportedEntryKind
     tracking: TrackingState
+    state: BaselineEntryState
     executable: bool
     size: int
     count_contribution: int
@@ -73,6 +91,7 @@ class BaselineEntry:
             and _is_digest(self.file_identity)
             and type(self.kind) is SupportedEntryKind
             and type(self.tracking) is TrackingState
+            and type(self.state) is BaselineEntryState
             and type(self.executable) is bool
             and type(self.size) is int
             and self.size >= 0
@@ -84,6 +103,14 @@ class BaselineEntry:
             and all(type(item) is str for item in self.symlink_chain)
         )
         if not valid:
+            raise ValueError("baseline entry is invalid")
+        if (
+            self.tracking is TrackingState.UNTRACKED
+            and self.state is not BaselineEntryState.UNTRACKED
+        ) or (
+            self.tracking is TrackingState.TRACKED
+            and self.state is BaselineEntryState.UNTRACKED
+        ):
             raise ValueError("baseline entry is invalid")
         if self.kind is SupportedEntryKind.REGULAR_FILE:
             if (
@@ -107,10 +134,15 @@ def _calculate_manifest_digest(
     entries: tuple[BaselineEntry, ...],
     source_head: str,
     source_branch: str,
+    source_index_digest: str,
+    source_status_digest: str,
 ) -> str:
     digest = hashlib.sha256(b"coding-harness:baseline-manifest:v1")
     _update_field(digest, source_head)
     _update_field(digest, source_branch)
+    _update_field(digest, source_index_digest)
+    _update_field(digest, source_status_digest)
+    _update_field(digest, str(len(entries)))
     for entry in entries:
         for value in (
             entry.path.identity,
@@ -120,6 +152,7 @@ def _calculate_manifest_digest(
             entry.metadata_digest,
             entry.kind.value,
             entry.tracking.value,
+            entry.state.value,
             "executable" if entry.executable else "non-executable",
             str(entry.size),
             entry.symlink_target or "",
@@ -137,6 +170,8 @@ class BaselineManifest:
     digest: str
     source_head: str
     source_branch: str
+    source_index_digest: str
+    source_status_digest: str
 
     def __post_init__(self) -> None:
         if (
@@ -148,12 +183,16 @@ class BaselineManifest:
             != len(self.entries)
             or not _is_git_object_id(self.source_head)
             or type(self.source_branch) is not str
+            or not _is_digest(self.source_index_digest)
+            or not _is_digest(self.source_status_digest)
             or not _is_digest(self.digest)
             or self.digest
             != _calculate_manifest_digest(
                 self.entries,
                 self.source_head,
                 self.source_branch,
+                self.source_index_digest,
+                self.source_status_digest,
             )
         ):
             raise ValueError("baseline manifest is invalid")
@@ -163,50 +202,123 @@ class BaselineManifest:
 
 
 def _git_environment() -> dict[str, str]:
-    environment = os.environ.copy()
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
     environment.update(
         {
             "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_SYSTEM": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_OPTIONAL_LOCKS": "0",
+            "LC_ALL": "C",
         }
     )
     return environment
 
 
-def _run_git(root: Path, *arguments: str) -> bytes:
+def _stop_process(process: subprocess.Popen[bytes]) -> None:
     try:
-        result = subprocess.run(
-            ["git", *arguments],
+        if process.poll() is not None:
+            process.wait(timeout=_GIT_CLEANUP_TIMEOUT_SECONDS)
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=_GIT_CLEANUP_TIMEOUT_SECONDS)
+            return
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=_GIT_CLEANUP_TIMEOUT_SECONDS)
+    except (OSError, subprocess.SubprocessError):
+        try:
+            process.kill()
+            process.wait(timeout=_GIT_CLEANUP_TIMEOUT_SECONDS)
+        except (OSError, subprocess.SubprocessError):
+            return
+
+
+def _run_git(
+    root: Path,
+    *arguments: str,
+    max_output_bytes: int | None = None,
+) -> bytes:
+    limit = _MAX_GIT_OUTPUT_BYTES if max_output_bytes is None else max_output_bytes
+    if type(limit) is not int or limit < 0:
+        raise ValueError(_INVALID_BASELINE)
+    try:
+        process = subprocess.Popen(
+            ["git", "-c", "safe.directory=*", *arguments],
             cwd=root,
             env=_git_environment(),
-            check=False,
-            capture_output=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            shell=False,
+            bufsize=0,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
         raise ValueError(_INVALID_BASELINE) from None
-    if result.returncode != 0:
-        raise ValueError(_INVALID_BASELINE)
-    return bytes(result.stdout)
+    assert process.stdout is not None
+    selector = selectors.DefaultSelector()
+    output = bytearray()
+    deadline = time.monotonic() + _GIT_TIMEOUT_SECONDS
+    completed = False
+    try:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while selector.get_map():
+            remaining_time = deadline - time.monotonic()
+            if remaining_time <= 0:
+                raise ValueError(_INVALID_BASELINE)
+            events = selector.select(timeout=min(0.1, remaining_time))
+            if not events:
+                continue
+            for key, _ in events:
+                remaining = limit + 1 - len(output)
+                if remaining <= 0:
+                    raise ValueError(_INVALID_BASELINE)
+                try:
+                    chunk = os.read(key.fd, min(64 * 1024, remaining))
+                except OSError:
+                    raise ValueError(_INVALID_BASELINE) from None
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                output.extend(chunk)
+                if len(output) > limit:
+                    raise ValueError(_INVALID_BASELINE)
+        remaining_time = deadline - time.monotonic()
+        if remaining_time <= 0:
+            raise ValueError(_INVALID_BASELINE)
+        try:
+            returncode = process.wait(timeout=remaining_time)
+        except subprocess.SubprocessError:
+            raise ValueError(_INVALID_BASELINE) from None
+        completed = True
+        if returncode != 0:
+            raise ValueError(_INVALID_BASELINE)
+        return bytes(output)
+    finally:
+        try:
+            selector.close()
+        finally:
+            try:
+                process.stdout.close()
+            finally:
+                if not completed:
+                    _stop_process(process)
 
 
 def _git_text(root: Path, *arguments: str) -> str:
     try:
-        return _run_git(root, *arguments).decode("utf-8", errors="strict").strip()
+        return _run_git(
+            root,
+            *arguments,
+            max_output_bytes=_MAX_GIT_TEXT_BYTES,
+        ).decode("utf-8", errors="strict").strip()
     except UnicodeError:
         raise ValueError(_INVALID_BASELINE) from None
 
 
-def _candidate_paths(root: Path) -> tuple[RepoPath, ...]:
-    output = _run_git(
-        root,
-        "ls-files",
-        "-z",
-        "--cached",
-        "--others",
-        "--exclude-standard",
-    )
+def _parse_paths(output: bytes) -> tuple[RepoPath, ...]:
     raw_names = output.split(b"\0")
     if raw_names and raw_names[-1] == b"":
         raw_names.pop()
@@ -220,6 +332,67 @@ def _candidate_paths(root: Path) -> tuple[RepoPath, ...]:
     if len({item.identity for item in parsed}) != len(parsed):
         raise ValueError(_INVALID_BASELINE)
     return tuple(sorted(parsed, key=lambda item: item.canonical))
+
+
+@dataclass(frozen=True, slots=True)
+class _GitState:
+    source_head: str
+    source_branch: str
+    candidates: tuple[RepoPath, ...]
+    index_state: bytes
+    status_state: bytes
+    staged_paths: frozenset[str]
+    unstaged_paths: frozenset[str]
+
+
+def _capture_git_state(root: Path) -> _GitState:
+    candidates = _parse_paths(
+        _run_git(
+            root,
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        )
+    )
+    index_state = _run_git(root, "ls-files", "--stage", "-z")
+    status_state = _run_git(
+        root,
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+    )
+    staged = _parse_paths(
+        _run_git(root, "diff", "--cached", "--name-only", "-z", "--")
+    )
+    unstaged = _parse_paths(
+        _run_git(root, "diff", "--name-only", "-z", "--")
+    )
+    return _GitState(
+        source_head=_git_text(root, "rev-parse", "--verify", "HEAD"),
+        source_branch=_git_text(root, "branch", "--show-current"),
+        candidates=candidates,
+        index_state=index_state,
+        status_state=status_state,
+        staged_paths=frozenset(item.identity for item in staged),
+        unstaged_paths=frozenset(item.identity for item in unstaged),
+    )
+
+
+def _entry_state(path: RepoPath, tracking: TrackingState, state: _GitState) -> BaselineEntryState:
+    if tracking is TrackingState.UNTRACKED:
+        return BaselineEntryState.UNTRACKED
+    staged = path.identity in state.staged_paths
+    unstaged = path.identity in state.unstaged_paths
+    if staged and unstaged:
+        return BaselineEntryState.TRACKED_MIXED
+    if staged:
+        return BaselineEntryState.TRACKED_STAGED
+    if unstaged:
+        return BaselineEntryState.TRACKED_UNSTAGED
+    return BaselineEntryState.TRACKED_CLEAN
 
 
 def _read_regular(root: Path, supported: SupportedEntry) -> bytes:
@@ -266,7 +439,11 @@ def _read_symlink(root: Path, supported: SupportedEntry) -> bytes:
     return encoded
 
 
-def _capture_entry(root: Path, path: RepoPath) -> BaselineEntry:
+def _capture_entry(
+    root: Path,
+    path: RepoPath,
+    git_state: _GitState,
+) -> BaselineEntry:
     inspected = inspect_supported_entry(root, path)
     if (
         inspected.status is not InspectionStatus.SUPPORTED
@@ -293,6 +470,7 @@ def _capture_entry(root: Path, path: RepoPath) -> BaselineEntry:
         file_identity=supported.file_identity,
         kind=supported.kind,
         tracking=supported.tracking,
+        state=_entry_state(path, supported.tracking, git_state),
         executable=supported.executable,
         size=len(content),
         count_contribution=supported.count_contribution,
@@ -315,22 +493,33 @@ def build_baseline(root: Path) -> BaselineManifest:
     except (OSError, RuntimeError):
         raise ValueError(_INVALID_BASELINE) from None
 
-    source_head = _git_text(trusted_root, "rev-parse", "--verify", "HEAD")
-    source_branch = _git_text(trusted_root, "branch", "--show-current")
+    initial_state = _capture_git_state(trusted_root)
     entries = tuple(
-        _capture_entry(trusted_root, path)
-        for path in _candidate_paths(trusted_root)
+        _capture_entry(trusted_root, path, initial_state)
+        for path in initial_state.candidates
         if os.path.lexists(trusted_root.joinpath(*path.segments))
     )
-    if (
-        source_head != _git_text(trusted_root, "rev-parse", "--verify", "HEAD")
-        or source_branch != _git_text(trusted_root, "branch", "--show-current")
-    ):
+    repeated_entries = tuple(
+        _capture_entry(trusted_root, entry.path, initial_state)
+        for entry in entries
+    )
+    final_state = _capture_git_state(trusted_root)
+    if initial_state != final_state or entries != repeated_entries:
         raise ValueError(_INVALID_BASELINE)
-    digest = _calculate_manifest_digest(entries, source_head, source_branch)
+    source_index_digest = hashlib.sha256(initial_state.index_state).hexdigest()
+    source_status_digest = hashlib.sha256(initial_state.status_state).hexdigest()
+    digest = _calculate_manifest_digest(
+        entries,
+        initial_state.source_head,
+        initial_state.source_branch,
+        source_index_digest,
+        source_status_digest,
+    )
     return BaselineManifest(
         entries=entries,
         digest=digest,
-        source_head=source_head,
-        source_branch=source_branch,
+        source_head=initial_state.source_head,
+        source_branch=initial_state.source_branch,
+        source_index_digest=source_index_digest,
+        source_status_digest=source_status_digest,
     )

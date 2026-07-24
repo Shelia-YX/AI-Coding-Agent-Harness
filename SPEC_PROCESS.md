@@ -436,3 +436,78 @@
 - 后续 review、整改、Green commit、push、PR 与 merge 结果尚不存在，不能提前记录。
 
 本阶段不关闭 WS-001、WS-006～009 或对应 PV；状态为 `WP10_GREEN_DOCUMENTATION_READY` 前的同期 Green 证据。
+
+### WP-10 Security/Specification Review
+
+本段于 `2026-07-24 11:39:16 +0800 (Asia/Shanghai)` 同期记录 WP-10 Green implementation 的只读 security/specification review 结论。
+
+#### Review result
+
+- Critical：`0`
+- Important：`4`
+- Minor：`0`
+- Decision：`CHANGES_REQUIRED`
+- 当前 implementation 不进入 merge 或 merge-prep。
+
+#### Important findings
+
+1. **Git routing environment isolation**：`build_baseline` 必须隔离 `GIT_DIR`、`GIT_WORK_TREE`、`GIT_INDEX_FILE` 等可改变 repository、worktree 或 index 路由的 ambient Git 环境变量，确保 HEAD、branch、候选路径和 inspected root 绑定到同一权威 repository。
+2. **Baseline snapshot consistency verification**：构建过程必须在完成前重新验证候选路径集合及相关 Git/filesystem 状态，或以等价 fail-closed 合同拒绝构建期间发生的新增、删除、tracking/index 漂移，避免生成跨时点 manifest。
+3. **Git state metadata completeness**：Baseline Manifest 必须补齐 re-check/recovery 所需的 Git 起始状态绑定，不能只以 `TRACKED/UNTRACKED` 和 HEAD/branch 替代 index/status 或 staged/unstaged/mixed 相关权威 metadata。
+4. **Bounded subprocess output**：Git 子进程 stdout/stderr 必须采用有界读取与稳定 fail-closed 结果，不能通过无界 `capture_output` 在 timeout 前累积任意输出。
+
+#### Boundary
+
+- 整改保持在 WP-10 的 `BaselineManifest`、`build_baseline`、`TaskWorkspace`、`materialize_workspace` 及其 owned tests 范围内，不扩大 WP ownership。
+- 本记录不修改 `SPEC.md` 或 `PLAN.md`，不改变 Requirement/PV ownership。
+- 本阶段不修改 production/tests，不声称 finding 已关闭，不声称 WP-10 已完成、已 push 或已 merge。
+
+### WP-10 Security Review Remediation
+
+本段于 `2026-07-24 11:49:54 +0800 (Asia/Shanghai)` 同期记录上述 Critical `0`、Important `4`、Minor `0` review findings 的有限整改与验证证据。
+
+#### Fix summary
+
+1. **Git routing environment isolation**：Git 子进程环境移除 ambient `GIT_*` 路由变量，并仅设置固定的只读配置、locale 与 optional-lock 行为，使 `GIT_DIR`、`GIT_WORK_TREE`、`GIT_INDEX_FILE` 不能把 baseline 构建重定向到其他 repository。
+2. **Snapshot consistency verification**：baseline 构建前后比较 HEAD、branch、候选路径集合、index/status 原始状态及 staged/unstaged 路径集合，并在最终返回前重新捕获全部 entries；任一漂移均 fail closed，不引入 workspace lock 或 WP-14 recovery。
+3. **Git state metadata completeness**：`BaselineManifest` 与 `TaskWorkspace` 绑定 `source_index_digest`、`source_status_digest`；每个 baseline entry 使用闭合状态区分 `TRACKED_CLEAN`、`TRACKED_STAGED`、`TRACKED_UNSTAGED`、`TRACKED_MIXED`、`UNTRACKED`，不实现 Change Set。
+4. **Bounded subprocess behavior**：Git stdout 改为有界流式读取，stderr 不缓存；timeout、读取失败、输出超限或非零退出均返回稳定 fail-closed 结果，不再使用无界 `capture_output`。
+
+#### Verification
+
+- 四个新增 security regression 节点：`4 passed / 0 failed`。
+- 完整 WP-10：`18 passed / 0 failed`。
+- WP-09 定向回归：`144 passed / 0 failed`。
+- `paths.py`、`file_model.py`、冻结 `SPEC.md`/`PLAN.md` 未修改；未实现 WP-11～14。
+
+#### Current state
+
+- 状态：`CHANGES_FIXED_PENDING_REREVIEW`。
+- 上述结果仅证明整改实现及定向测试当前通过；尚未获得复审批准，不能进入 merge。
+- 当前未 push、未 merge、未进入 main，不声称 WP-10 已完成。
+
+### WP-10 Security Re-review
+
+本段于 `2026-07-24 11:55:10 +0800 (Asia/Shanghai)` 同期记录对原四项 Important finding 的限定复审。
+
+#### Review result
+
+- 原 review：Critical `0`、Important `4`、Minor `0`，Decision `CHANGES_REQUIRED`。
+- 本次 re-review：Critical `0`、Important `0`、Minor `0`。
+- Git routing environment isolation：`CLOSED`。
+- Baseline snapshot consistency：`CLOSED`。
+- Manifest Git state metadata completeness：`CLOSED`。
+- Bounded subprocess output handling：`CLOSED`。
+
+#### Verification evidence
+
+- Security regression：`4 passed / 0 failed`。
+- 完整 WP-10：`18 passed / 0 failed`。
+- WP-09 定向回归：`144 passed / 0 failed`。
+- 限定复审未发现新的 scope 问题。
+
+#### Decision 与当前边界
+
+- Decision：`APPROVED_FOR_MERGE_PREP`。
+- 该决定仅批准进入后续 merge-prep 流程；整改及本次记录尚未 commit，尚未 push，尚未创建 PR，尚未 merge main。
+- 本记录不修改 production/tests、冻结 `SPEC.md`/`PLAN.md` 或 WP ownership，也不声称 WP-10 已完成。

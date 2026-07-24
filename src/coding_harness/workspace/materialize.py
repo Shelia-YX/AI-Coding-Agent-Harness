@@ -40,6 +40,8 @@ class TaskWorkspace:
     baseline_digest: str
     source_head: str
     source_branch: str
+    source_index_digest: str
+    source_status_digest: str
 
     def __post_init__(self) -> None:
         if (
@@ -47,6 +49,8 @@ class TaskWorkspace:
             or not _is_digest(self.baseline_digest)
             or not _is_git_object_id(self.source_head)
             or type(self.source_branch) is not str
+            or not _is_digest(self.source_index_digest)
+            or not _is_digest(self.source_status_digest)
         ):
             raise ValueError("task workspace is invalid")
 
@@ -151,4 +155,6 @@ def materialize_workspace(
         baseline_digest=manifest.digest,
         source_head=manifest.source_head,
         source_branch=manifest.source_branch,
+        source_index_digest=manifest.source_index_digest,
+        source_status_digest=manifest.source_status_digest,
     )
