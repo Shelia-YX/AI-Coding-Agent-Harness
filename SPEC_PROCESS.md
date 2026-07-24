@@ -641,3 +641,46 @@
 - I-1 整改不得修改或复制 WP-07 Approval/Policy authority；如公共合同不足，必须先停止并裁决接口 ownership。
 - 本次只记录 review，不修改 production/tests、冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push 或创建 PR。
 - WP-12、WP-13、WP-14 均未开始。
+
+### WP-11 Remediation Design Refinement 与 Red 准备审批
+
+本段于 `2026-07-24 14:08:57 +0800 (Asia/Shanghai)` 同期记录 I-1～I-4 整改设计 refinement 及人工审批。当前四项 finding 仍为 open：I-1 Approval consumption 与失败原子性、I-2 文件副作用失败原子性、I-3 `SandboxInputManifest` 完整绑定、I-4 Path/file safety 与 bounded failure。
+
+#### Interface decision
+
+- 结论：`NO_INTERFACE_REDECISION_REQUIRED`。
+- WP-07 `consume_approval` 返回 immutable consumed candidate 以及 previous/expected/new revision 构成的 CAS intent，不执行持久化。
+- WP-11 可复用该既有 authority，在成功时返回 pending-persistence 组合结果；不得修改、复制或弱化 WP-07 Approval/Policy authority。
+
+#### R-1 — Published-pending-commit
+
+- 选择的成功语义为 `PUBLISHED_PENDING_COMMIT`：文件已经安全发布，但 candidate manifest 尚未 active，Approval CAS 尚未持久化。
+- 结果必须明确 `persistence_committed=false`、`active_manifest=None`；提交成功前，candidate manifest 不得用于 Agent execution、ChangeSet 或 export。
+- 后续 CAS 失败由 WP-23 按冻结错误语义 `PERSISTENCE_AFTER_SIDE_EFFECT_FAILED → RECOVERY_REQUIRED` 处理；不得把 CAS intent 描述为已经持久化消费。
+
+#### R-2 — Exact no-clobber mechanism
+
+- 在目标同目录创建 owned temporary file，使用 descriptor-based bounded write、digest/metadata verification、权限设置与 fsync。
+- 持有 parent directory fd，通过 `os.link()` 从 temporary name 创建 target；target 已存在时必须失败且不得覆盖既有 inode/content。
+- 所需 dir-fd/no-follow/link 原语不可用的平台确定性 fail closed；不得退化到 `replace` 或可能覆盖目标的 `rename` 语义。
+- 本次创建的 temporary、target link 与目录必须有精确 ownership receipt 并逆序清理；不得删除调用前已存在路径。
+
+#### R-3 — Identity/digest/runtime split
+
+- `expected_manifest_identity` 在 Approval 创建前由 normalized request、task/Plan/baseline、workspace logical identity、前序 manifest、next revision、entries/mode/stages/destination 和 idempotency key 确定性生成。
+- Approval 冻结该 expected identity；trusted consumption candidate 产生后，actual `manifest_digest` 进一步绑定 Approval identity、Policy binding 和 CAS revisions。
+- Runtime publication receipt 仅记录本次物理验证与 cleanup 所需的 fd/inode/dev/temporary/target 状态，不进入长期 identity。
+- 固定合同：
+
+  `candidate_manifest.identity == expected_manifest_identity`
+
+  `candidate_manifest.digest == approval/CAS-bound digest`
+
+- 明确禁止 `manifest_digest == expected_manifest_identity`；两者语义不同，构造顺序不形成循环依赖。
+
+#### Approval 与下一阶段边界
+
+- 人工结论：`APPROVED_FOR_REMEDIATION_RED_PREP`。
+- 下一阶段仅允许进入 `WP11_REMEDIATION_RED`，且只允许修改 `tests/integration/workspace/test_ignored.py`；production remediation 仍未授权。
+- I-1～I-4 尚未关闭；不得进入 merge preparation。
+- WP-12～WP-15、WP-23 均未进入，冻结 `SPEC.md`/`PLAN.md` 保持不变。
