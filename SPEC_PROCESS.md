@@ -369,3 +369,145 @@
 - 本次仅修改 `SPEC_PROCESS.md` 与 `AGENT_LOG.md`，不修改 `SPEC.md`、`PLAN.md`、产品代码或测试。
 - 本次不创建 GitHub Release，不创建 WebUI、WP-10 文件或其他交付制品。
 - 本次不创建 commit，不改写 Git 历史，也不进入 WP-10 implementation。
+
+## WP-10 `build_baseline` Ownership Clarification
+
+本节记录时间为 `2026-07-24 10:53:29 +0800 (Asia/Shanghai)`，是 WP-10 进入 Red/implementation 前的同期接口 ownership 澄清。
+
+### Ambiguity
+
+- `SPEC.md` 附录 D.4 将 `build_baseline` 定义为 Harness Internal Operation。【VERIFIED】
+- `PLAN.md` 的 WP-10 接口仅列出 `BaselineManifest`、`TaskWorkspace` 和 `materialize_workspace`，且 PLAN 全文未将 `build_baseline` 分配给其他 WP。【VERIFIED】
+
+### Approved Decision 与边界
+
+- 用户权威决定 `build_baseline` 由 WP-10 拥有。【APPROVED DECISION】
+- WP-10 拥有 `build_baseline`、`BaselineManifest`、`TaskWorkspace` 和 `materialize_workspace`。
+- WP-23 仅拥有 `TaskService` 的 application orchestration；它可以在后续任务启动流程中调用 `build_baseline`，但不重新实现或拥有 Baseline 构建规则。
+- WP-11～14 仅消费 WP-10 产生的 Baseline/Task Workspace 输出，并保持各自既有 Requirement/PV 与文件 ownership。
+
+### Non-change
+
+- 本澄清不修改 `SPEC.md` 或 `PLAN.md`，不改变任何 Requirement/PV ownership。
+- 本澄清仅补齐冻结 SPEC operation 与 PLAN WP-10 既有领域/文件范围之间的接口归属，不新增产品语义。
+- 本轮不创建 `build_baseline` 接口，不修改产品代码或测试，不进入 Red/implementation。
+
+### WP-10 Red 阶段证据
+
+本段于 `2026-07-24 11:13:49 +0800 (Asia/Shanghai)` 同期补录 WP-10 Red 阶段证据，不表示 WP-10 已实现或完成。
+
+#### VERIFIED
+
+- Red 测试文件 `tests/integration/workspace/test_baseline.py` 已创建；当前 SHA-256 为 `b8d0dae4b6265c9f1a1440e6f9076239804d950d889362bf1e07ebb2d3306fbe`。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider --collect-only tests/integration/workspace/test_baseline.py -q` 成功收集 `14` 个节点，退出码为 `0`。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider tests/integration/workspace/test_baseline.py -q` 执行完整 Red，结果为 `14 collected / 0 passed / 14 failed / 0 errors`，退出码为 `1`。
+- 全部失败均由测试内部转换为固定的 `WP-10 production API is not implemented`，对应缺少 `coding_harness.workspace.manifest` 及尚未实现的 WP-10 API；没有 collection、fixture、syntax 或环境错误。
+- 当前 `src/` 无差异，staged 为空；未创建临时 production/mock implementation，未进入 Green。
+
+#### USER_REPORTED
+
+- 用户确认当前阶段为 `WP10_RED_EXECUTION_COMPLETE`，并批准将 `14` 个失败分类为 `EXPECTED_RED`。
+
+#### UNKNOWN
+
+- 后续 production 实现、Green、回归、review、commit、push 与 PR 的结果均尚不存在，不能提前记录。
+
+本证据不关闭 WS-001、WS-006～009 或对应 PV，也不改变其状态。
+
+### WP-10 Green 阶段证据
+
+本段于 `2026-07-24 11:29:07 +0800 (Asia/Shanghai)` 同期记录 WP-10 从合法 Red 到最小 Green 的实现证据；当前仍等待 review，不表示 WP-10 已完成、已 commit 或已 merge。
+
+#### VERIFIED
+
+- Red 基线为 `14 collected / 0 passed / 14 failed / 0 errors`，全部分类为缺少 WP-10 production API 的 `EXPECTED_RED`；最小实现后，以相同定向文件执行得到 `14 passed / 0 failed`。
+- 新增 `src/coding_harness/workspace/manifest.py`，提供不可变 `BaselineManifest` 与 WP-10 ownership 内的 `build_baseline`；新增 `src/coding_harness/workspace/materialize.py`，提供不可变 `TaskWorkspace` 与 `materialize_workspace`。
+- 实现捕获任务启动时 tracked、staged、unstaged、untracked 用户文件状态，并从不可变 manifest 内容创建独立可写 Task Workspace。
+- 定向测试验证 origin repository 内容、index、HEAD 与 branch 均保持不变，且 materialized workspace 不复制或挂载 `.git`。
+- WP-09 定向回归 `tests/unit/workspace/test_paths.py` 为 `144 passed / 0 failed`。
+- 当前 production diff 仅新增 WP-10 owned 的 `manifest.py` 与 `materialize.py`；未修改 WP-09 的 `paths.py` 或 `file_model.py`，未实现 WP-11 ignored input、WP-12 synthetic Git、WP-13 Change Set 或 WP-14 apply/recovery。
+
+#### USER_REPORTED
+
+- 用户批准本轮目标为以最小 WP-10 production 将既有 `14` 个 Red 节点推进到 Green，并要求完成后等待 review。
+
+#### UNKNOWN
+
+- 后续 review、整改、Green commit、push、PR 与 merge 结果尚不存在，不能提前记录。
+
+本阶段不关闭 WS-001、WS-006～009 或对应 PV；状态为 `WP10_GREEN_DOCUMENTATION_READY` 前的同期 Green 证据。
+
+### WP-10 Security/Specification Review
+
+本段于 `2026-07-24 11:39:16 +0800 (Asia/Shanghai)` 同期记录 WP-10 Green implementation 的只读 security/specification review 结论。
+
+#### Review result
+
+- Critical：`0`
+- Important：`4`
+- Minor：`0`
+- Decision：`CHANGES_REQUIRED`
+- 当前 implementation 不进入 merge 或 merge-prep。
+
+#### Important findings
+
+1. **Git routing environment isolation**：`build_baseline` 必须隔离 `GIT_DIR`、`GIT_WORK_TREE`、`GIT_INDEX_FILE` 等可改变 repository、worktree 或 index 路由的 ambient Git 环境变量，确保 HEAD、branch、候选路径和 inspected root 绑定到同一权威 repository。
+2. **Baseline snapshot consistency verification**：构建过程必须在完成前重新验证候选路径集合及相关 Git/filesystem 状态，或以等价 fail-closed 合同拒绝构建期间发生的新增、删除、tracking/index 漂移，避免生成跨时点 manifest。
+3. **Git state metadata completeness**：Baseline Manifest 必须补齐 re-check/recovery 所需的 Git 起始状态绑定，不能只以 `TRACKED/UNTRACKED` 和 HEAD/branch 替代 index/status 或 staged/unstaged/mixed 相关权威 metadata。
+4. **Bounded subprocess output**：Git 子进程 stdout/stderr 必须采用有界读取与稳定 fail-closed 结果，不能通过无界 `capture_output` 在 timeout 前累积任意输出。
+
+#### Boundary
+
+- 整改保持在 WP-10 的 `BaselineManifest`、`build_baseline`、`TaskWorkspace`、`materialize_workspace` 及其 owned tests 范围内，不扩大 WP ownership。
+- 本记录不修改 `SPEC.md` 或 `PLAN.md`，不改变 Requirement/PV ownership。
+- 本阶段不修改 production/tests，不声称 finding 已关闭，不声称 WP-10 已完成、已 push 或已 merge。
+
+### WP-10 Security Review Remediation
+
+本段于 `2026-07-24 11:49:54 +0800 (Asia/Shanghai)` 同期记录上述 Critical `0`、Important `4`、Minor `0` review findings 的有限整改与验证证据。
+
+#### Fix summary
+
+1. **Git routing environment isolation**：Git 子进程环境移除 ambient `GIT_*` 路由变量，并仅设置固定的只读配置、locale 与 optional-lock 行为，使 `GIT_DIR`、`GIT_WORK_TREE`、`GIT_INDEX_FILE` 不能把 baseline 构建重定向到其他 repository。
+2. **Snapshot consistency verification**：baseline 构建前后比较 HEAD、branch、候选路径集合、index/status 原始状态及 staged/unstaged 路径集合，并在最终返回前重新捕获全部 entries；任一漂移均 fail closed，不引入 workspace lock 或 WP-14 recovery。
+3. **Git state metadata completeness**：`BaselineManifest` 与 `TaskWorkspace` 绑定 `source_index_digest`、`source_status_digest`；每个 baseline entry 使用闭合状态区分 `TRACKED_CLEAN`、`TRACKED_STAGED`、`TRACKED_UNSTAGED`、`TRACKED_MIXED`、`UNTRACKED`，不实现 Change Set。
+4. **Bounded subprocess behavior**：Git stdout 改为有界流式读取，stderr 不缓存；timeout、读取失败、输出超限或非零退出均返回稳定 fail-closed 结果，不再使用无界 `capture_output`。
+
+#### Verification
+
+- 四个新增 security regression 节点：`4 passed / 0 failed`。
+- 完整 WP-10：`18 passed / 0 failed`。
+- WP-09 定向回归：`144 passed / 0 failed`。
+- `paths.py`、`file_model.py`、冻结 `SPEC.md`/`PLAN.md` 未修改；未实现 WP-11～14。
+
+#### Current state
+
+- 状态：`CHANGES_FIXED_PENDING_REREVIEW`。
+- 上述结果仅证明整改实现及定向测试当前通过；尚未获得复审批准，不能进入 merge。
+- 当前未 push、未 merge、未进入 main，不声称 WP-10 已完成。
+
+### WP-10 Security Re-review
+
+本段于 `2026-07-24 11:55:10 +0800 (Asia/Shanghai)` 同期记录对原四项 Important finding 的限定复审。
+
+#### Review result
+
+- 原 review：Critical `0`、Important `4`、Minor `0`，Decision `CHANGES_REQUIRED`。
+- 本次 re-review：Critical `0`、Important `0`、Minor `0`。
+- Git routing environment isolation：`CLOSED`。
+- Baseline snapshot consistency：`CLOSED`。
+- Manifest Git state metadata completeness：`CLOSED`。
+- Bounded subprocess output handling：`CLOSED`。
+
+#### Verification evidence
+
+- Security regression：`4 passed / 0 failed`。
+- 完整 WP-10：`18 passed / 0 failed`。
+- WP-09 定向回归：`144 passed / 0 failed`。
+- 限定复审未发现新的 scope 问题。
+
+#### Decision 与当前边界
+
+- Decision：`APPROVED_FOR_MERGE_PREP`。
+- 该决定仅批准进入后续 merge-prep 流程；整改及本次记录尚未 commit，尚未 push，尚未创建 PR，尚未 merge main。
+- 本记录不修改 production/tests、冻结 `SPEC.md`/`PLAN.md` 或 WP ownership，也不声称 WP-10 已完成。
