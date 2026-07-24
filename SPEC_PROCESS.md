@@ -511,3 +511,19 @@
 - Decision：`APPROVED_FOR_MERGE_PREP`。
 - 该决定仅批准进入后续 merge-prep 流程；整改及本次记录尚未 commit，尚未 push，尚未创建 PR，尚未 merge main。
 - 本记录不修改 production/tests、冻结 `SPEC.md`/`PLAN.md` 或 WP ownership，也不声称 WP-10 已完成。
+
+### WP-10 PR 合并与 main 同步证据
+
+本段于 `2026-07-24 12:53:57 +0800 (Asia/Shanghai)` 同期记录 WP-10 远程合并及本地 main 同步结果。
+
+#### VERIFIED
+
+- GitHub Pull Request `#1` 已合并，base 为 `main`，head 为 `wp-10-baseline-task-workspace`；PR head 为 `479322b136aaf7f4169e9a43155cd19497782a99`。
+- merge commit 为 `3910ed48944fb2c63dac9ecaa8b5bfcb5a1aaafd`，其两个 parent 分别为合并前 main `cbbe64f637b3914fa46f644c2cc56901924b17c0` 与 WP-10 head `479322b136aaf7f4169e9a43155cd19497782a99`，merge strategy 为普通 merge commit，不是 squash。
+- 本地 `main` 已通过 `git pull origin main` fast-forward 到 `3910ed48944fb2c63dac9ecaa8b5bfcb5a1aaafd`，与 `origin/main` 一致；WP-10 implementation 已进入 main。
+- 既有 Red `14 failed`、Green `18 passed`、security regression `4 passed`、WP-09 regression `144 passed` 及最终 Critical `0` / Important `0` / Minor `0` 的证据保持在前述 WP-10 记录中，本次不改写这些证据。
+
+#### Boundary
+
+- 本次同步与记录不修改 `SPEC.md`、`PLAN.md`、production 或 tests。
+- 本次不删除 WP-10 branch/worktree，不开始 WP-11。
