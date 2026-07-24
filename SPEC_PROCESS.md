@@ -527,3 +527,57 @@
 
 - 本次同步与记录不修改 `SPEC.md`、`PLAN.md`、production 或 tests。
 - 本次不删除 WP-10 branch/worktree，不开始 WP-11。
+
+## WP-11 Ignored Input 接口 Ownership 决策
+
+本节于 `2026-07-24 13:08:53 +0800 (Asia/Shanghai)` 记录 WP-11 只读调查发现的接口歧义、候选方案和 ownership 决策；本轮不进入 Red 或 implementation。
+
+### Ambiguity
+
+- `SPEC.md` 定义 `SandboxInputManifest` 与 Harness Internal Operation `materialize_ignored_input`，并要求 `include_ignored_input` 经过独立 High-risk Action Approval 后才生成新 Sandbox Input Manifest Version。
+- `PLAN.md` 将 `SandboxInputManifest`、`materialize_ignored_input`、`ignored.py` 和 `test_ignored.py` 分配给 WP-11，但未定义 trusted Approval binding 的输入形式、Sandbox Input Manifest Version identity 或 materialization 返回合同。
+- 现有 WP-07 `consume_approval` 需要 trusted current Approval、expected revision、presented reference、current execution context、trusted Policy record 及 identity 和当前时间；其 `ApprovalResult` 本身不能脱离这些可信输入被当作可伪造不了的授权凭证。
+- 因此不能在缺少 ownership 决策时直接进入 Red：让调用方只传布尔值、任意 digest、自声明 identity 或单独构造的 `ApprovalResult`，都会削弱既有审批权威和一次消费/CAS 合同。
+
+### Candidate options
+
+1. **Option A — WP-11 权威 materialization gateway（选择）**：`materialize_ignored_input` 接收 WP-07 `consume_approval` 所需的完整可信输入，在 WP-11 权威入口内调用既有消费合同；只有 `include_ignored_input` 的匹配 Action Approval 成功消费且 `side_effect_permitted=true` 时，才创建新 Sandbox Input Manifest Version 并物化输入。返回不可变组合结果，包含 Approval consumption/CAS intent、当前版本 manifest 和更新后的 Task Workspace binding；任何失败均无物化副作用。
+2. **Option B — 调用方预消费后仅传 `ApprovalResult`**：接口较窄，但 `ApprovalResult` 可由调用方构造，单独使用不能证明 trusted record、Policy record 和 execution context 已被完整核对，拒绝。
+3. **Option C — 全部延后到 WP-23 application service**：可由后续 orchestration 组合 persistence transaction，但会使 WP-11 无法拥有并验证 WS-015 的领域门禁，且错误转移当前 PLAN ownership，拒绝。
+
+### Chosen ownership boundary
+
+- WP-07 继续拥有 Approval/Policy 权威、完整绑定校验、一次消费领域合同和 persistence CAS 前置条件。
+- WP-11 拥有 `SandboxInputManifest`、其不可变 version identity、ignored input entry/mode/allowed-stage/exportability 合同，以及 `materialize_ignored_input` 的 fail-closed 权威入口和不可变组合结果。
+- WP-11 复用 WP-07 `consume_approval`，不得复制、降低或绕过 Approval 校验；不得接受裸 bool、调用方声明的 approved 状态或单独的 forged result 作为授权。
+- WP-23 后续只拥有 application orchestration 和 persistence transaction 协调；数据库原子提交不由 WP-11 实现。
+- WP-10 的 Baseline authority 与 Task Workspace identity 保持只读依赖；WP-11 不修改 Baseline Manifest，也不拥有 WP-12 Synthetic Git、WP-13 Change Set 或 WP-14 Apply/recovery。
+
+### Return contract 与未决项
+
+- 成功结果必须同时绑定：新 Sandbox Input Manifest Version、未改变的 Baseline digest、Task Workspace identity、已消费 Approval 的 previous/expected/new revision，以及物化的精确 ignored entry/mode。
+- 失败结果必须 fail closed，`side_effect_permitted=false`，不产生新 manifest version，不修改 workspace。
+- Red 前仍需在 WP-11 owned tests 中固定具体字段名称、稳定 reason code 和版本 identity 的构造格式；这些是本决策边界内的合同细化，不得改变上述权威来源和 ownership。
+
+### Non-change
+
+- 本决策不修改冻结 `SPEC.md` 或 `PLAN.md`，不改变 Requirement/PV ownership。
+- 本轮不创建 `ignored.py`、`test_ignored.py` 或任何 production/test，不实现 ignored input，不进入 Red。
+
+### WP-11 合法 Red 阶段证据
+
+本段于 `2026-07-24 13:19:40 +0800 (Asia/Shanghai)` 同期记录 WP-11 Red 测试创建与执行结果；不表示 ignored input 已实现或进入 Green。
+
+#### VERIFIED
+
+- 创建唯一 WP-11 test owner 文件 `tests/integration/workspace/test_ignored.py`；未创建 `src/coding_harness/workspace/ignored.py`，production 无变化。
+- 测试覆盖 WS-010、WS-011、WS-012、WS-015、WS-016，并包含 PLAN 九个具名节点、五个 owned PV 参数化节点、十三个 approval binding drift 节点，以及 manifest version、CAS revision、invalid input、immutability 和 forged result 边界。
+- collect-only 命令使用 `PYTHONDONTWRITEBYTECODE=1` 与 `-p no:cacheprovider`，结果为 `37 collected / 0 collection errors`，退出码 `0`。
+- 完整 Red 使用相同环境和测试文件，结果为 `37 collected / 0 passed / 37 failed / 0 errors`，退出码 `1`。
+- 全部 `37` 个失败均在测试执行期被转换为固定 `WP-11 production API is not implemented`，准确对应 `coding_harness.workspace.ignored` 尚不存在；没有 syntax、fixture、collection、network 或环境失败。
+
+#### Classification 与边界
+
+- Red 分类：`EXPECTED_RED = 37`，invalid Red 为 `0`。
+- 当前未实现 WP-07 Approval/Policy、WP-10 Baseline、WP-12 Synthetic Git、WP-13 Change Set 或 WP-14 Apply/recovery；未修改冻结 `SPEC.md`/`PLAN.md`。
+- 当前状态为 `WP11_RED_EXECUTION_COMPLETE`；未进入 Green、未 commit、未 push、未创建 PR。
