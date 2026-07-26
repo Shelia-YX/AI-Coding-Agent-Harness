@@ -1,0 +1,24 @@
+{
+  "fixture_schema": "wp11-manifest-digest-v1-evidence:1",
+  "candidate_root": "/tmp/wp11-manifest-digest-v1-candidate-generation/",
+  "review_status": "PASS",
+  "source_artifacts": {
+    "vectors.input.json": "7b1c14cf155505982493bff4860a9a3fcfce496ffee2f2738583fb340ecdb05b",
+    "encoder_a.py": "fb47e7f8c79b92332b2240cfef5d86bab5a5e58eb064e9c62a58ba7cc81cc17f",
+    "oracle_b.py": "ccc5d2dc1068ec71947f1077c74d20997b0e01433535880430ed88dceae9cf73",
+    "encoder_a.output.json": "01e9bc24d8a058b47da32c69add6b4dfe5debe111b122a4c7bab40aea0a874fe",
+    "oracle_b.output.json": "01e9bc24d8a058b47da32c69add6b4dfe5debe111b122a4c7bab40aea0a874fe",
+    "vectors.annotated.txt": "d3846020fdc376e670cd71b2fcfa35a1cac4a0f2c61baf80533e8c0bd5a6eec0",
+    "enrich_evidence.py": "281cb019868707386aa0e22b35c6e59703b41a9ba1cf58301e453595e9c2f38f",
+    "vectors.annotated.offsets.json": "2931faac19d4206e6abf39e147a473990edf3c270452b8a64d2b89bd7fd23605",
+    "mutation.evidence.json": "7e7d1bbe947e400891c2e7002a06bec2655d08f037332856c4ce246c939deef4",
+    "invariance.evidence.json": "da070280698488b6bd4d8601a0d936d515f9e4e8d7e3ee5bf5271ae34c5eb6d5"
+  },
+  "repository_artifacts": {
+    "wp11_manifest_digest_v1_vectors.input.json": "7b1c14cf155505982493bff4860a9a3fcfce496ffee2f2738583fb340ecdb05b",
+    "wp11_manifest_digest_v1_vectors.json": "01e9bc24d8a058b47da32c69add6b4dfe5debe111b122a4c7bab40aea0a874fe",
+    "wp11_manifest_digest_v1_offsets.json": "2931faac19d4206e6abf39e147a473990edf3c270452b8a64d2b89bd7fd23605",
+    "wp11_manifest_digest_v1_mutations.json": "7e7d1bbe947e400891c2e7002a06bec2655d08f037332856c4ce246c939deef4",
+    "wp11_manifest_digest_v1_invariance.json": "da070280698488b6bd4d8601a0d936d515f9e4e8d7e3ee5bf5271ae34c5eb6d5"
+  }
+}

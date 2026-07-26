@@ -527,3 +527,481 @@
 
 - 本次同步与记录不修改 `SPEC.md`、`PLAN.md`、production 或 tests。
 - 本次不删除 WP-10 branch/worktree，不开始 WP-11。
+
+## WP-11 Ignored Input 接口 Ownership 决策
+
+本节于 `2026-07-24 13:08:53 +0800 (Asia/Shanghai)` 记录 WP-11 只读调查发现的接口歧义、候选方案和 ownership 决策；本轮不进入 Red 或 implementation。
+
+### Ambiguity
+
+- `SPEC.md` 定义 `SandboxInputManifest` 与 Harness Internal Operation `materialize_ignored_input`，并要求 `include_ignored_input` 经过独立 High-risk Action Approval 后才生成新 Sandbox Input Manifest Version。
+- `PLAN.md` 将 `SandboxInputManifest`、`materialize_ignored_input`、`ignored.py` 和 `test_ignored.py` 分配给 WP-11，但未定义 trusted Approval binding 的输入形式、Sandbox Input Manifest Version identity 或 materialization 返回合同。
+- 现有 WP-07 `consume_approval` 需要 trusted current Approval、expected revision、presented reference、current execution context、trusted Policy record 及 identity 和当前时间；其 `ApprovalResult` 本身不能脱离这些可信输入被当作可伪造不了的授权凭证。
+- 因此不能在缺少 ownership 决策时直接进入 Red：让调用方只传布尔值、任意 digest、自声明 identity 或单独构造的 `ApprovalResult`，都会削弱既有审批权威和一次消费/CAS 合同。
+
+### Candidate options
+
+1. **Option A — WP-11 权威 materialization gateway（选择）**：`materialize_ignored_input` 接收 WP-07 `consume_approval` 所需的完整可信输入，在 WP-11 权威入口内调用既有消费合同；只有 `include_ignored_input` 的匹配 Action Approval 成功消费且 `side_effect_permitted=true` 时，才创建新 Sandbox Input Manifest Version 并物化输入。返回不可变组合结果，包含 Approval consumption/CAS intent、当前版本 manifest 和更新后的 Task Workspace binding；任何失败均无物化副作用。
+2. **Option B — 调用方预消费后仅传 `ApprovalResult`**：接口较窄，但 `ApprovalResult` 可由调用方构造，单独使用不能证明 trusted record、Policy record 和 execution context 已被完整核对，拒绝。
+3. **Option C — 全部延后到 WP-23 application service**：可由后续 orchestration 组合 persistence transaction，但会使 WP-11 无法拥有并验证 WS-015 的领域门禁，且错误转移当前 PLAN ownership，拒绝。
+
+### Chosen ownership boundary
+
+- WP-07 继续拥有 Approval/Policy 权威、完整绑定校验、一次消费领域合同和 persistence CAS 前置条件。
+- WP-11 拥有 `SandboxInputManifest`、其不可变 version identity、ignored input entry/mode/allowed-stage/exportability 合同，以及 `materialize_ignored_input` 的 fail-closed 权威入口和不可变组合结果。
+- WP-11 复用 WP-07 `consume_approval`，不得复制、降低或绕过 Approval 校验；不得接受裸 bool、调用方声明的 approved 状态或单独的 forged result 作为授权。
+- WP-23 后续只拥有 application orchestration 和 persistence transaction 协调；数据库原子提交不由 WP-11 实现。
+- WP-10 的 Baseline authority 与 Task Workspace identity 保持只读依赖；WP-11 不修改 Baseline Manifest，也不拥有 WP-12 Synthetic Git、WP-13 Change Set 或 WP-14 Apply/recovery。
+
+### Return contract 与未决项
+
+- 成功结果必须同时绑定：新 Sandbox Input Manifest Version、未改变的 Baseline digest、Task Workspace identity、已消费 Approval 的 previous/expected/new revision，以及物化的精确 ignored entry/mode。
+- 失败结果必须 fail closed，`side_effect_permitted=false`，不产生新 manifest version，不修改 workspace。
+- Red 前仍需在 WP-11 owned tests 中固定具体字段名称、稳定 reason code 和版本 identity 的构造格式；这些是本决策边界内的合同细化，不得改变上述权威来源和 ownership。
+
+### Non-change
+
+- 本决策不修改冻结 `SPEC.md` 或 `PLAN.md`，不改变 Requirement/PV ownership。
+- 本轮不创建 `ignored.py`、`test_ignored.py` 或任何 production/test，不实现 ignored input，不进入 Red。
+
+### WP-11 合法 Red 阶段证据
+
+本段于 `2026-07-24 13:19:40 +0800 (Asia/Shanghai)` 同期记录 WP-11 Red 测试创建与执行结果；不表示 ignored input 已实现或进入 Green。
+
+#### VERIFIED
+
+- 创建唯一 WP-11 test owner 文件 `tests/integration/workspace/test_ignored.py`；未创建 `src/coding_harness/workspace/ignored.py`，production 无变化。
+- 测试覆盖 WS-010、WS-011、WS-012、WS-015、WS-016，并包含 PLAN 九个具名节点、五个 owned PV 参数化节点、十三个 approval binding drift 节点，以及 manifest version、CAS revision、invalid input、immutability 和 forged result 边界。
+- collect-only 命令使用 `PYTHONDONTWRITEBYTECODE=1` 与 `-p no:cacheprovider`，结果为 `37 collected / 0 collection errors`，退出码 `0`。
+- 完整 Red 使用相同环境和测试文件，结果为 `37 collected / 0 passed / 37 failed / 0 errors`，退出码 `1`。
+- 全部 `37` 个失败均在测试执行期被转换为固定 `WP-11 production API is not implemented`，准确对应 `coding_harness.workspace.ignored` 尚不存在；没有 syntax、fixture、collection、network 或环境失败。
+
+#### Classification 与边界
+
+- Red 分类：`EXPECTED_RED = 37`，invalid Red 为 `0`。
+- 当前未实现 WP-07 Approval/Policy、WP-10 Baseline、WP-12 Synthetic Git、WP-13 Change Set 或 WP-14 Apply/recovery；未修改冻结 `SPEC.md`/`PLAN.md`。
+- 当前状态为 `WP11_RED_EXECUTION_COMPLETE`；未进入 Green、未 commit、未 push、未创建 PR。
+
+### WP-11 Green 实现证据
+
+本段于 `2026-07-24 13:38:32 +0800 (Asia/Shanghai)` 同期记录 WP-11 从合法 Red 到最小 Green 的实现与验证结果；当前等待 security/spec review，不表示已 commit、push、创建 PR 或 merge。
+
+#### VERIFIED
+
+- 新增 WP-11 owned production 文件 `src/coding_harness/workspace/ignored.py`。
+- 实现不可变 `SandboxInputManifest` 及其 version identity、revision、digest 与 baseline binding；实现 trusted Approval consumption gateway，复用 WP-07 `consume_approval` 的 trusted current record、Policy record、execution context 与 revision 校验。
+- materialization 对 approval binding、path、entry type、size、digest、用途、stage、manifest identity 和 limit 执行 fail-closed validation；只有匹配审批成功消费后才允许产生新 manifest version 和 workspace 副作用。
+- `read_only_input` 物化为只读任务副本，`writable_ephemeral` 物化为独立可写临时副本；两者均不可导出给 LLM，不具备 Change Set eligibility 或原仓库 writeback 权限。
+- 使用 `PYTHONDONTWRITEBYTECODE=1 /tmp/myharness-dev-venv/bin/python -m pytest -p no:cacheprovider tests/integration/workspace/test_ignored.py -q`，结果为 `37 passed / 0 failed`，退出码 `0`。
+- WP-07 Approval/Policy、WP-10 `manifest.py`/`materialize.py`、冻结 `SPEC.md`/`PLAN.md` 均未修改。
+
+#### Current state
+
+- 状态：`WP11_GREEN_IMPLEMENTATION_COMPLETE`。
+- 当前新增 `ignored.py`，尚未 commit Green implementation。
+- 当前等待独立 security/spec review；未进入 WP-12、WP-13 或 WP-14。
+
+### WP-11 Security/Specification Review
+
+本段于 `2026-07-24 13:54:12 +0800 (Asia/Shanghai)` 同期记录对 commit `ab2efb1124dd600bd9c693c6f448140876716394` 的只读定向 review。Review 前重新运行 WP-11 定向测试，结果为 `37 passed in 1.81s`；测试通过不替代源码合同审查。
+
+#### Review result
+
+- Critical：`0`
+- Important：`4`
+- Minor：`0`
+- Decision：`CHANGES_REQUIRED`
+
+#### Findings
+
+- **I-1 — Approval consumption 与失败原子性（Important）**
+  - Contract：审批消费、CAS intent、WP-11 验证、文件物化和 manifest version 必须组成 fail-closed 合同；失败不得返回可被误认为已经成功消费的状态。
+  - Evidence：`consume_approval()` 先于 WP-11 专属 binding、源文件及物化校验执行；后续 `_denied()` 虽将 permitted/side-effect 改为 false，仍保留 consumed Approval 与新 revision。
+  - Required remediation：调整组合顺序或结果合同，使任何 WP-11 验证/物化失败保持原 Approval revision 和未消费状态；不得修改、复制或弱化 WP-07 authority。若 WP-07 public contract 无法支持该原子组合，必须重新暂停并进行接口裁决。
+  - Test gap：现有 tests 未断言消费成功之后的 WP-11 binding/materialization failure 不返回 consumed record/CAS intent。
+- **I-2 — 文件副作用失败原子性（Important）**
+  - Contract：任一物化失败不得残留本次创建的文件或目录，不得推进 manifest，不得返回成功 workspace binding。
+  - Evidence：`_write_copy()` 创建目录后存在直接 false-return 路径；写后内容比较为 false 时可能保留目标文件，现有清理路径未统一覆盖全部失败分支。
+  - Required remediation：建立单一可验证的 cleanup/finalize 路径，清除本次创建的文件与目录；清理结果不确定时返回稳定 fail-closed cleanup 状态。
+  - Test gap：现有 tests 只覆盖写入前拒绝，未覆盖部分目录/文件已创建后的失败与清理。
+- **I-3 — SandboxInputManifest 完整绑定（Important）**
+  - Contract：manifest identity/digest 必须完整绑定前序 manifest、consumed Approval revision/CAS intent、source metadata/content、mode 和 materialized workspace binding。
+  - Evidence：当前 digest 只覆盖当前 identity、revision、baseline 和 entries，未覆盖前序 manifest identity/digest、Approval identity/revision 或 TaskWorkspace binding。
+  - Required remediation：扩充 immutable manifest contract 和确定性 digest，加入前序版本、可信 approval consumption 及 workspace identity/binding，并验证任一字段漂移 fail closed。
+  - Test gap：现有 version/digest tests 未覆盖上述绑定字段漂移或不同历史错误产生等价 identity 的情况。
+- **I-4 — Path/file safety 与 bounded failure（Important）**
+  - Contract：source/destination 必须保持 lexical/physical containment，抵抗 symlink/hardlink/path replacement/TOCTOU，且所有读取有界。
+  - Evidence：source 中间目录采用 `lstat` 后再按路径打开，`O_NOFOLLOW` 只保护最终分量；未定义 hardlink 拒绝；destination 直接信任可构造的 `TaskWorkspace.root`，父目录检查存在替换窗口；写后 `Path.read_bytes()` 可能在竞争替换后无界读取。
+  - Required remediation：采用 descriptor-relative no-follow traversal 或等价受控根机制，验证 workspace root authority/physical containment，明确 hardlink 策略，并以已打开 descriptor 进行有界写后验证。
+  - Test gap：现有 tests 未覆盖中间目录替换、hardlink、伪造 workspace root、destination race 或写后无界替换。
+
+#### Gate 与边界
+
+- WP-11 当前不得进入 merge preparation，production 修复尚未获准。
+- I-1 整改不得修改或复制 WP-07 Approval/Policy authority；如公共合同不足，必须先停止并裁决接口 ownership。
+- 本次只记录 review，不修改 production/tests、冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push 或创建 PR。
+- WP-12、WP-13、WP-14 均未开始。
+
+### WP-11 Remediation Design Refinement 与 Red 准备审批
+
+本段于 `2026-07-24 14:08:57 +0800 (Asia/Shanghai)` 同期记录 I-1～I-4 整改设计 refinement 及人工审批。当前四项 finding 仍为 open：I-1 Approval consumption 与失败原子性、I-2 文件副作用失败原子性、I-3 `SandboxInputManifest` 完整绑定、I-4 Path/file safety 与 bounded failure。
+
+#### Interface decision
+
+- 结论：`NO_INTERFACE_REDECISION_REQUIRED`。
+- WP-07 `consume_approval` 返回 immutable consumed candidate 以及 previous/expected/new revision 构成的 CAS intent，不执行持久化。
+- WP-11 可复用该既有 authority，在成功时返回 pending-persistence 组合结果；不得修改、复制或弱化 WP-07 Approval/Policy authority。
+
+#### R-1 — Published-pending-commit
+
+- 选择的成功语义为 `PUBLISHED_PENDING_COMMIT`：文件已经安全发布，但 candidate manifest 尚未 active，Approval CAS 尚未持久化。
+- 结果必须明确 `persistence_committed=false`、`active_manifest=None`；提交成功前，candidate manifest 不得用于 Agent execution、ChangeSet 或 export。
+- 后续 CAS 失败由 WP-23 按冻结错误语义 `PERSISTENCE_AFTER_SIDE_EFFECT_FAILED → RECOVERY_REQUIRED` 处理；不得把 CAS intent 描述为已经持久化消费。
+
+#### R-2 — Exact no-clobber mechanism
+
+- 在目标同目录创建 owned temporary file，使用 descriptor-based bounded write、digest/metadata verification、权限设置与 fsync。
+- 持有 parent directory fd，通过 `os.link()` 从 temporary name 创建 target；target 已存在时必须失败且不得覆盖既有 inode/content。
+- 所需 dir-fd/no-follow/link 原语不可用的平台确定性 fail closed；不得退化到 `replace` 或可能覆盖目标的 `rename` 语义。
+- 本次创建的 temporary、target link 与目录必须有精确 ownership receipt 并逆序清理；不得删除调用前已存在路径。
+
+#### R-3 — Identity/digest/runtime split
+
+- `expected_manifest_identity` 在 Approval 创建前由 normalized request、task/Plan/baseline、workspace logical identity、前序 manifest、next revision、entries/mode/stages/destination 和 idempotency key 确定性生成。
+- Approval 冻结该 expected identity；trusted consumption candidate 产生后，actual `manifest_digest` 进一步绑定 Approval identity、Policy binding 和 CAS revisions。
+- Runtime publication receipt 仅记录本次物理验证与 cleanup 所需的 fd/inode/dev/temporary/target 状态，不进入长期 identity。
+- 固定合同：
+
+  `candidate_manifest.identity == expected_manifest_identity`
+
+  `candidate_manifest.digest == approval/CAS-bound digest`
+
+- 明确禁止 `manifest_digest == expected_manifest_identity`；两者语义不同，构造顺序不形成循环依赖。
+
+#### Approval 与下一阶段边界
+
+- 人工结论：`APPROVED_FOR_REMEDIATION_RED_PREP`。
+- 下一阶段仅允许进入 `WP11_REMEDIATION_RED`，且只允许修改 `tests/integration/workspace/test_ignored.py`；production remediation 仍未授权。
+- I-1～I-4 尚未关闭；不得进入 merge preparation。
+- WP-12～WP-15、WP-23 均未进入，冻结 `SPEC.md`/`PLAN.md` 保持不变。
+
+### WP-11 Remediation Red 证据
+
+本段于 `2026-07-24 14:21:42 +0800 (Asia/Shanghai)` 同期记录 I-1～I-4 整改回归测试的合法 Red；production remediation 尚未授权。
+
+#### VERIFIED
+
+- `tests/integration/workspace/test_ignored.py` collect-only 成功：`61 collected / 0 collection errors`。
+- 原有 WP-11 tests 为 `37 passed`，无旧测试回归。
+- 新增整改 tests 为 `24` 个，完整执行结果为 `37 passed / 24 failed / 0 errors`。
+- 新增节点分类为 `EXPECTED_RED = 24`、unexpected pass `0`、errors `0`。
+- Finding 映射：I-1 为 `5` 个节点，I-2 为 `4` 个节点，I-3 为 `6` 个节点，I-4 为 `9` 个节点；四组新增节点均为 EXPECTED_RED。
+
+#### Failure classification
+
+- I-1：当前缺少 `PUBLISHED_PENDING_COMMIT`、candidate/active manifest 分离及精确 Approval CAS 组合合同。
+- I-2：当前缺少本次调用创建对象的 cleanup ownership、完成状态和稳定 cleanup failure result。
+- I-3：当前 manifest identity/digest 未完整绑定前序 manifest、Approval CAS intent 和 workspace logical binding。
+- I-4：当前未实现 descriptor-relative traversal、明确 hardlink policy、approved-size bounded I/O 和 `os.link()` no-clobber publication。
+
+#### Boundary
+
+- 本次仅修改 WP-11 test owner 文件；production、WP-07、WP-09、WP-10、冻结 `SPEC.md`/`PLAN.md` 均未修改。
+- I-1～I-4 仍保持 open；合法 Red 不表示 finding 已关闭。
+- Production remediation 尚未授权，未进入 WP-12～WP-15 或 WP-23。
+- 当前状态：`WP11_REMEDIATION_RED_EXECUTION_COMPLETE`。
+
+### WP-11 第一次 Remediation Security/Specification Re-review
+
+本段于 `2026-07-24 14:44:48 +0800 (Asia/Shanghai)` 同期记录对 review base `a5fea62e031b4692105bb12c8f3a2d551ac7b7fb` 之未提交整改实现的第一次只读定向复审。Dirty production diff 精确为 `src/coding_harness/workspace/ignored.py`。新鲜验证为 WP-11 `61 passed`，WP-07/WP-09/WP-10 定向回归 `253 passed`；测试通过不替代源码控制流与安全合同审查。
+
+#### Finding closure
+
+- **I-1 — Approval consumption 与失败原子性：CLOSED**
+  - 成功结果明确为 `PUBLISHED_PENDING_COMMIT`，分别返回 trusted consumed candidate、精确 Approval CAS intent 和 candidate manifest；`active_manifest=None`、`persistence_committed=false`，未声称 CAS 已提交。
+  - 失败结果返回原 current Approval 并保持原 revision，不暴露 consumed candidate、CAS intent 或 candidate manifest，也不返回成功 publication state。
+
+#### Open findings
+
+- **I-2 — 文件副作用失败原子性：OPEN**
+  - Cleanup ledger 仅使用 `Path`/name，未为每个 owned object 保存并在删除前复核 parent/name/dev/inode。
+  - `ENOTEMPTY` 被当作 cleanup complete；descriptor close 异常被静默忽略。
+  - 残余风险为遗留本次创建的 owned object，或删除竞争替换后的同名非 owned 对象。
+- **I-3 — SandboxInputManifest 完整绑定：OPEN**
+  - Genesis `expected_manifest_identity` 直接采用 `approval.sandbox_manifest_identity`，未由 WP-11 从稳定规范化字段确定性构造。
+  - 当前只能证明 Approval 提供了某个 identity 值，不能证明该值完整绑定 task、PlanVersion、baseline 与 ordered entries。
+- **I-4 — Path/file safety 与 bounded failure：OPEN**
+  - Source root fd 在初次检查后关闭，后续按路径重新打开；ignore/source validation 仍包含路径式操作。
+  - 发布后仍使用路径式 `os.chmod(target_path)`；cleanup 仍使用路径式 `target.unlink()`、`directory.rmdir()`，辅助检查仍使用 `os.lstat(path)`，尚未由 parent fd 与 dev/inode ownership 完整约束。
+  - 因此仍存在 source root、published target 或 cleanup object 被替换的窗口。
+
+#### Unsafe API search
+
+- 未发现 `Path.read_bytes()`、`Path.write_bytes()`、`Path.replace()`、`shutil.copy*`、`shutil.rmtree()`、`os.rename()` 或 `os.replace()`。
+- 仍存在需整改的路径式 `target.unlink()`、`directory.rmdir()`、`os.chmod(target_path)` 和辅助 `os.lstat(path)`。
+
+#### Gate 与边界
+
+- Original findings closed：`1`；Original findings open：`3`。
+- New Critical：`0`；New Important：`0`；New Minor：`0`。
+- Decision：`CHANGES_REQUIRED`。
+- 当前 `ignored.py` 不得提交；I-1 后续不得进行无关重构。
+- I-2～I-4 需要第二轮定向 Red；第二轮 production remediation 尚未授权。
+- 本次仅记录复审，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不 stage、commit、push、创建 PR 或进入 WP-12。
+
+### WP-11 第二轮 Residual Red 证据
+
+本段于 `2026-07-24 15:05:50 +0800 (Asia/Shanghai)` 同期记录 I-2～I-4 第二轮 residual regression tests 的合法 Red；I-1 保持 CLOSED，round-2 production remediation 尚未授权。
+
+#### VERIFIED
+
+- `tests/integration/workspace/test_ignored.py` collect-only 成功：`82 collected / 0 collection errors`。
+- 原有 WP-11 tests 为 `61 passed`，无旧测试回归。
+- 新增 residual tests 为 `21` 个，完整执行结果为 `61 passed / 21 failed / 0 errors`。
+- 新增节点分类为 `EXPECTED_RED = 21`、unexpected pass `0`、errors `0`。
+- Finding 映射完整：I-2 为 `4` 个 EXPECTED_RED，I-3 为 `11` 个 EXPECTED_RED，I-4 为 `6` 个 EXPECTED_RED。
+
+#### Failure classification
+
+- **I-2 — OPEN**：cleanup ledger 缺少 dev/inode ownership 证明；`ENOTEMPTY` 与 descriptor close failure 的完成状态不正确；路径替换后仍可能误删非 owned 同名对象。
+- **I-3 — OPEN**：genesis `expected_manifest_identity` 尚未由稳定规范化字段确定性构造；Approval 提供的 identity 仍可能成为事实来源；task、PlanVersion、baseline、source、mode、destination 与 idempotency 等 stable-field binding 不完整。
+- **I-4 — OPEN**：descriptor authority 生命周期不连续；source/ignore validation 仍存在路径式重建；post-publish chmod 与 cleanup 仍可能作用于竞争替换后的 inode。
+
+#### Boundary
+
+- I-1 保持 CLOSED；I-2、I-3、I-4 仍为 OPEN，合法 residual Red 不表示 finding 已关闭。
+- 本轮新增 Red 时 production 未变化；既有 `src/coding_harness/workspace/ignored.py` 第一轮 remediation working diff 保持未提交，其 diff SHA-256 指纹仍为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
+- Round-2 production remediation 尚未授权；未进入 PR 或 WP-12，未修改 WP-07、WP-09、WP-10 或冻结 `SPEC.md`/`PLAN.md`。
+- 当前状态：`WP11_RESIDUAL_RED_EXECUTION_COMPLETE`。
+
+### WP-11 Residual Test Contract Conflict 与合法停止
+
+本段于 `2026-07-24 15:25:24 +0800 (Asia/Shanghai)` 同期记录第二轮 production remediation 开始前发现的测试合同冲突。停止状态为 `STOPPED_FOR_WP11_RESIDUAL_TEST_CONTRACT_CONFLICT`；本次停止不授权弱化 production security。
+
+#### I-3 conflict
+
+- 部分既有测试将任意字符串 `sandbox-manifest:1`、`sandbox-manifest:genesis`、`sandbox-manifest:next` 作为 Approval 的 sandbox manifest identity，同时要求 WP-11 从稳定请求字段独立、确定性计算 expected identity。
+- 两项要求无法同时成立，除非实现继续将 Approval 值作为 identity 事实来源，或对测试字符串进行硬编码；两种做法均违反已冻结的整改设计。
+- 正确合同为：
+
+  `computed_expected_identity = deterministic stable-request hash`
+
+  `approval.sandbox_manifest_identity = approval-frozen expected identity`
+
+  `computed_expected_identity == approval.sandbox_manifest_identity`
+
+- Approval revision 漂移不得重写 computed expected identity；对应测试必须使用规范计算出的 expected identity，而不是任意调用方字符串。
+
+#### I-4 conflict
+
+- 部分既有测试通过 monkeypatch 路径式 `os.chmod(target_path)` 注入失败或路径替换，并要求该不安全 API 实际执行。
+- 整改合同要求移除发布后的路径式 chmod，改为发布前对 owned temporary descriptor 执行 `os.fchmod()`。
+- 测试不得以不安全 API 被调用作为成功前提；后续获批修订应在 descriptor-safe 原语上注入失败，或断言竞争替换对象的 mode/content 均未被修改。
+
+#### Classification、完整性与 gate
+
+- 该问题分类为 test contract defect，不是允许弱化 production security；当前 `82` 项测试不能全部继续视为冻结的正确合同。
+- 后续仅冲突节点可在明确审批后修订；未冲突测试继续保持冻结。
+- I-1 保持 CLOSED；I-2、I-3、I-4 保持 OPEN。Round-2 production remediation 暂停，未进入 PR 或 WP-12。
+- 既有 `src/coding_harness/workspace/ignored.py` working diff 不得丢失、reset、stash、stage 或提交；其当前 diff SHA-256 指纹为 `d1fb1e9d68fe18613853b622bec8711d25f878c1d845b4f3cce305af552293b8`。
+- `tests/integration/workspace/test_ignored.py` 当前 SHA-256 为 `9eb659dbc95b2017d23eba0f57a7e41cbbdb3ccbb0f880d0862bb6fe8a4e28ce`。
+- 本次仅记录冲突和合法停止事件，不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`。
+
+### WP-11 Identity Algorithm 与 Stage Set 人工裁决
+
+本段于 `2026-07-24 16:07:22 +0800 (Asia/Shanghai)` 同期记录人工裁决 `IDENTITY_ALGORITHM_APPROVED`。接口结论保持 `NO_INTERFACE_REDECISION_REQUIRED`；本次只批准 identity v1 与 stage-set 合同，不授权修改 tests 或继续 production remediation。
+
+#### 唯一 Identity v1
+
+- WP-11 采用 typed length-prefixed binary canonical encoding、SHA-256 和恰好 `64` 个 lowercase hexadecimal 字符输出。
+- 当前只支持唯一固定 schema v1；builder 与 gateway 均不接受调用方提供的 algorithm/schema version。Approval 通过冻结 v1 计算出的 expected identity 间接绑定算法；当前不新增或声称已有独立 schema-version 字段，不修改 WP-07 Approval 公共合同。
+- Future v2 必须重新进行 identity migration/interface/security decision；当前不支持多版本并存、自动 downgrade 或 fallback。
+- 三个独立 domain 为：
+  - `coding-harness:workspace-logical-identity`
+  - `coding-harness:sandbox-input-expected-identity`
+  - `coding-harness:sandbox-input-manifest-digest`
+
+#### Canonical binary grammar
+
+- `VarUInt` 为最短形式的 canonical unsigned LEB128。
+- `TypedValue := TypeCode || VarUInt(payload_length) || payload`。
+- `Field := VarUInt(field_tag) || TypedValue`。
+- `StructPayload := VarUInt(field_count) || Field[0] || ... || Field[n-1]`。
+- `ListPayload := VarUInt(element_count) || TypedValue[0] || ... || TypedValue[n-1]`。
+- `OptionalPayload := 0x00 | 0x01 || TypedValue`。
+- `VariantPayload := VarUInt(variant_tag) || TypedValue`；genesis 使用独立 tagged variant，不使用普通字符串 sentinel。
+- Struct field tags 必须严格递增；duplicate、missing、unknown 或 out-of-order tag 均 fail closed。Digest payload 固定为 `32` raw bytes，boolean payload 固定为 `1` byte；所有 nested payload 均受外层长度约束，decoder 必须拒绝 trailing bytes。相同抽象输入只能产生唯一 canonical byte stream。
+
+#### RepoPath、Unicode、Destination 与 Stage Set
+
+- RepoPath 仅复用 WP-09 public canonical validation，并编码 `RepoPath.canonical` 的 exact strict UTF-8 bytes；WP-11 不追加 normalization 或路径字符限制，不接受 bytes、隐式转换或 OS path。
+- 普通 identifier 必须是非空 `str` 且可 strict UTF-8 编码；WP-11 不静默 normalization，identity 绑定 exact code-point/UTF-8 sequence，并仅复用所属 public contract 的字符限制。
+- `destination_repo_path` 固定派生为 TaskWorkspace namespace 中与 source 相同的 canonical RepoPath；builder 自行派生，调用方不得覆盖。Source 与 destination 即使文本相同也使用不同 field tag。
+- 批准 stage set `S2 = {EXECUTING, VERIFYING}`。每个 entry 的合法 canonical `allowed_stages` 仅为 `("EXECUTING",)` 或 `("EXECUTING", "VERIFYING")`；必须包含 `EXECUTING`，`VERIFYING` 可选。Token 为大小写敏感的 uppercase ASCII，按 ASCII bytes 排序；duplicate、unknown token fail closed。
+- 运行时 `TaskState` 扩展不得自动扩展 v1；任何新 stage 必须经过新 schema/security decision。
+
+#### Public pure builder 与 identity layering
+
+- 批准 WP-11 public pure builder `compute_expected_manifest_identity(...)`。其职责仅限输入 validation、normalization、workspace logical identity 计算、destination derivation 和 expected identity computation。
+- Builder 不得 consume Approval、决定 Policy、创建 CAS intent、materialize 文件或返回 authorization state；它不创建新的 WP-07 authority 类型。
+- 固定分层：
+
+  `candidate_manifest.identity == expected_manifest_identity`
+
+  `candidate_manifest.digest == approval/CAS-bound manifest digest`
+
+- Expected identity 与 candidate manifest digest 使用不同 domain 和字段集，不得相等或互换；expected identity 只绑定审批前稳定请求，manifest digest 进一步绑定 Approval/CAS、Policy、immutable exclusion flags 与 ordered manifest entries。
+
+#### Vectors、findings 与 gate
+
+- Genesis minimal、genesis multi-entry/multi-stage、continuation 和 stable-field mutation 四类 vector 输入计划获批。
+- Exact vector digest 尚未生成或冻结；后续必须由 encoder A、independent oracle B 和 annotated byte-stream review 三方一致后才能冻结进 tests/process evidence，production builder 不得作为自身 oracle。
+- I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。
+- Test-contract revision 尚未开始，production remediation 保持暂停；未进入 PR 或 WP-12。
+- 本次不修改 production/tests、WP-07/WP-09/WP-10 或冻结 `SPEC.md`/`PLAN.md`，不生成 vector digest，不 stage、commit 或 push。
+
+### WP-11 Identity v1 规范向量证据冻结
+
+本段于 `2026-07-24 16:53:07 +0800 (Asia/Shanghai)` 同期记录 `WP11_NORMATIVE_VECTOR_EVIDENCE_FREEZE`。候选审查裁决为 `CANDIDATE_DIGESTS_APPROVED`；本次只把批准的 exact values 与 Vector 1 annotation 固化为证据，不修改测试合同或 production builder。
+
+#### 冻结文件与来源
+
+- 规范向量证据容器：`tests/fixtures/workspace/wp11_identity_v1_vectors.json`。
+- Vector 1 人工审查证据：`tests/fixtures/workspace/wp11_identity_v1_vector1.annotated.txt`。
+- Candidate input SHA-256：`aa2cee0e4c2c3daaf508f6be9421d4597ee2e52dc98d256a984dd262f837066d`。
+- Encoder A SHA-256：`89b3e6cc65eb6bf50ce802ddd8a78b10bf435c293e9723aed22020623f5f9d9b`。
+- Independent Oracle B SHA-256：`2eb1d38cb13280f2a5cc03c3ae046f948c42de42cc8f28bbc706b1fe24217d26`。
+- JSON 仅为 evidence container，不是 identity canonical serialization；`derived` 明确为 audit evidence only、not builder input。
+
+#### Frozen exact values
+
+| Vector | Workspace stream length | `workspace_logical_identity` | Expected stream length | `expected_manifest_identity` |
+|---|---:|---|---:|---|
+| `genesis-minimal` | 119 | `38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f` | 332 | `e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5` |
+| `genesis-multi` | 117 | `8d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf27` | 471 | `aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b5` |
+| `continuation-single-entry` | 124 | `86ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0` | 409 | `8c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9` |
+
+#### Review evidence 与边界
+
+- Encoder A 与独立 Oracle B 的三个 base vectors、十三个合法 mutations 均为 byte-for-byte `PASS`；Vector 1 人工 byte-stream/offset review 为 `PASS`。
+- Validation-limit non-binding 为 `PASS`；二十二个 abstract invalid 均 fail-before-hash 且不产生 stream/digest；五个 fixture-conformance invalid 由 comparison/reviewer 层检查。
+- Decoder conformance 为 `DEFERRED_TO_DECODER_CONFORMANCE_TESTS`、`OUT_OF_SCOPE_FOR_VECTOR_FREEZE`，不得据此声称 wire-invalid 已验证。
+- Reproducibility rerun 为 `DEFERRED`，原因是 candidate scripts 不支持 non-overwriting output root；该延期不等于 reproducibility `PASS`。
+- Candidate scripts 本身不进入仓库。本次冻结不开始 test-contract revision，不继续 production remediation；I-1 保持 `CLOSED`，I-2、I-3、I-4 保持 `OPEN`，未进入 PR 或 WP-12。
+
+### WP-11 Public Identity Builder Interface 人工裁决
+
+本段于 `2026-07-24 17:17:25 +0800 (Asia/Shanghai)` 同期记录人工裁决 `WP11_PUBLIC_BUILDER_INTERFACE_APPROVED`。接口结果为 `NO_INTERFACE_REDECISION_REQUIRED`；本次只冻结 public identity builder 的最小公共接口，不恢复 test-contract revision，也不授权 production remediation。
+
+#### Signature、Request 与 Previous Reference
+
+- 批准唯一签名：
+
+  ```python
+  def compute_expected_manifest_identity(
+      request: ExpectedManifestIdentityRequest,
+  ) -> ExpectedManifestIdentityResult:
+      ...
+  ```
+
+- 函数只接受单一 `ExpectedManifestIdentityRequest`；固定使用 identity v1，不接受 version/schema 参数。非精确 request 类型 fail closed。函数必须 pure、deterministic，不承担 Approval、Policy、CAS 或 filesystem authority。
+- `ExpectedManifestIdentityRequest` 为 `@dataclass(frozen=True, slots=True)`，字段精确为：
+  - `task_id: str`
+  - `plan_version_identity: str`
+  - `baseline_digest: str`
+  - `previous_manifest: PreviousSandboxInputManifestRef | None`
+  - `new_revision: int`
+  - `entries: tuple[ExpectedManifestEntry, ...]`
+  - `idempotency_key: str`
+  - `max_input_count: int`
+  - `max_input_bytes: int`
+- `entries` 必须为精确 tuple。Request 不接受 caller-supplied destination、workspace identity、expected identity、Approval、Policy 或 CAS intent；validation limits 不进入 identity，builder 不修改输入。
+- `PreviousSandboxInputManifestRef` 为不可变、slots 类型，字段为 `revision: int`、`identity: str`、`digest: str`。`None` 是唯一 genesis 表示，ref 表示 continuation；revision 必须为正的精确 int且拒绝 bool，identity/digest 必须是 `64` lowercase hex，`new_revision == previous.revision + 1`。
+- Builder 不验证 previous ref 是否对应当前 active manifest；currentness 由 gateway/Approval/CAS 验证，该引用不依赖 WP-23。
+
+#### Entry、Identifier 与 Limits
+
+- `ExpectedManifestEntry` 为不可变、slots 类型，字段为：
+  - `source: RepoPath`
+  - `kind: IgnoredInputKind`
+  - `approved_size: int`
+  - `content_digest: str`
+  - `mode: IgnoredInputMode`
+  - `allowed_stages: tuple[str, ...]`
+- V1 的 kind 仅允许 `REGULAR_FILE`；approved size 必须为非负精确 int并拒绝 bool。Stage 必须为 tuple 且仅允许 `("EXECUTING",)` 或 `("EXECUTING", "VERIFYING")`；list、reversed、duplicate 或 unknown stage 均 fail closed。Destination 从 source 派生，duplicate source fail closed。
+- Required identifier 必须为非空 `str` 且可 strict UTF-8 编码。WP-11 不静默 normalization，只复用 identifier 所属 public contract 已有的字符限制，不无条件新增 NUL 或 Unicode 字符禁令；exact UTF-8 sequence 进入 identity。
+- `max_input_count` 与 `max_input_bytes` 必须为非负精确 int，拒绝 bool；`0` 合法。二者只约束当前 request，只参与 validation，不进入 identity。非法 limit 使用 `INVALID_LIMIT`，实际超限分别使用 `COUNT_LIMIT_EXCEEDED` 与 `BYTE_LIMIT_EXCEEDED`。
+
+#### Result、Failure Contract 与 Public Exports
+
+- `ExpectedManifestIdentityResult` 为不可变、slots 类型，仅包含：
+  - `workspace_logical_identity: str`
+  - `expected_manifest_identity: str`
+- Result 不返回 normalized entries、destination、canonical bytes、authorization、Approval/CAS、manifest、runtime receipt 或任何 filesystem authority。
+- 公共异常为 `ExpectedManifestIdentityError(ValueError)`，其稳定字段为 `reason: ExpectedManifestIdentityReason`。最终 reason set 为：
+  - `INVALID_REQUEST`
+  - `INVALID_IDENTIFIER`
+  - `INVALID_DIGEST`
+  - `INVALID_REPO_PATH`
+  - `INVALID_ENTRY_TYPE`
+  - `INVALID_MODE`
+  - `INVALID_STAGE_SET`
+  - `DUPLICATE_SOURCE`
+  - `INVALID_SIZE`
+  - `INVALID_LIMIT`
+  - `INVALID_REVISION`
+  - `INVALID_PREVIOUS_MANIFEST`
+  - `COUNT_LIMIT_EXCEEDED`
+  - `BYTE_LIMIT_EXCEEDED`
+- Reason 是稳定测试合同；message 非稳定且不得泄漏文件内容、secret、绝对路径或底层异常。所有失败必须 fail before hash，不返回部分 result、不修改输入，也不进行 filesystem、Approval、Policy 或 CAS 操作。
+- 从 `coding_harness.workspace.ignored` 公开：
+  - `compute_expected_manifest_identity`
+  - `ExpectedManifestIdentityRequest`
+  - `ExpectedManifestEntry`
+  - `PreviousSandboxInputManifestRef`
+  - `ExpectedManifestIdentityResult`
+  - `ExpectedManifestIdentityError`
+  - `ExpectedManifestIdentityReason`
+- 不新建 `coding_harness.workspace.__init__`，也不公开 encoder、canonical byte stream helper 或 authorization state。
+
+#### Frozen Vector Mapping 与 Gate
+
+- Frozen fixture 的 `input` 无歧义映射为 request；`derived` 仅为 audit evidence，不是 builder input；`expected.workspace_logical_identity` 与 `expected.expected_manifest_identity` 分别映射到 result 的同名字段。
+- `genesis-minimal`、`genesis-multi` 与 `continuation-single-entry` 三个 base vector 均适用上述映射。Destination 由 source 派生；validation limits 仅用于校验。
+- 当前状态：public builder interface `APPROVED`；identity algorithm v1 `APPROVED`；normative vectors `FROZEN / REMOTE-SYNCED`；test-contract revision 仍为 `PAUSED`，production remediation 仍为 `PAUSED`。
+- I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。本次未修改 production/tests、frozen fixtures 或冻结 `SPEC.md`/`PLAN.md`，未进入 PR 或 WP-12。
+
+### WP-11 最终关闭记录
+
+本段于 `2026-07-26 12:41:39 +0800 (Asia/Shanghai)` 同期记录 WP-11 最终实现、验证与远程同步结果。最终 commit 为 `deff0382a64b67859090891de1f95b9988d30bfd`，commit subject 为 `fix(workspace): implement WP11 manifest digest v1`；本地与 `origin/wp-11-ignored-input-governance` 均指向该 commit，工作区 clean。状态明确更新为：
+
+`WP11 CLOSED`
+
+#### Finding closure
+
+- **I-1 — Approval consumption 与失败原子性：CLOSED。** 成功结果保持 `PUBLISHED_PENDING_COMMIT`，明确分离 consumed candidate、Approval CAS intent 与 candidate manifest；`active_manifest=None` 且 `persistence_committed=False`。失败路径不暴露 consumed candidate，并保持原 Approval/revision。WP-07 Approval/CAS authority 未被复制或修改。
+- **I-2 — 文件副作用与 cleanup ownership：CLOSED。** Cleanup 使用 owned receipt 绑定并在删除前复核 object type、device 与 inode；cleanup failure 独立、稳定地传播且不覆盖 primary operation reason，descriptor close failure 不伪装为成功。
+- **I-3 — Identity 与 manifest digest 完整绑定：CLOSED。** Public expected-identity builder 使用批准的 identity v1；candidate identity 与 manifest digest 保持分层。Manifest digest 使用 `coding-harness:sandbox-input-manifest-digest`、schema v1 和批准的 typed length-prefixed canonical binary encoding，绑定 identity、revision、baseline digest、Approval CAS intent digest、workspace logical identity、immutable exclusion flags 与 canonical ordered full entry set；旧 v2 domain 与 fallback 均不存在。
+- **I-4 — Path/file safety 与 bounded failure：CLOSED。** Descriptor authority、bounded I/O、source/target physical verification、owned temporary、`os.link()` no-clobber publication、替换竞争检测与 unsupported-platform fail-closed 合同均由 WP-11 regression nodes 覆盖；未退化为覆盖式 rename/replace 或路径式安全关键 publish。
+
+#### Verification evidence
+
+- Frozen manifest digest v1 vectors 三项 exact match：
+  - `genesis-minimal`：`af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed`
+  - `genesis-multi`：`35acc09a22c9ea553486ca13df145ede3301a301f564ec47a91b6bbae6e7c4e5`
+  - `continuation-single-entry`：`5503b9f1b4d02d3e6143f2ae69d3e9641d930e0ea9759148ff9905a74077fd8e`
+- Fixture strict validation：`1 passed`；duplicate key、非法 UTF-8、NaN/Infinity、schema、stream length、SHA-256、offset partition、mutation coverage、ordering invariance 与 provenance 均受验证。
+- WP-11 integration suite：`85 passed / 0 failed / 0 errors`。
+- WP-07/WP-09/WP-10 定向 cross regression：`253 passed / 0 failed / 0 errors`。
+- `git diff --check` 通过；未生成 cache 或 bytecode。
+
+#### 实现范围与非修改边界
+
+- 最终 closure commit 精确包含：
+  - `src/coding_harness/workspace/ignored.py`
+  - `tests/integration/workspace/test_ignored.py`
+  - `tests/fixtures/workspace/wp11_manifest_digest_v1_*`
+  - `tests/unit/workspace/test_wp11_manifest_digest_fixture.py`
+- WP-11 保持既定 ownership：ignored-input governance、manifest/version、approved materialization gateway、identity/digest binding、non-export/non-writeback 与 filesystem safety。
+- 未修改 `SPEC.md`、`PLAN.md`、WP-07 Approval/Policy authority、WP-09 path/file model、WP-10 baseline authority或任何 WP-12+ 文件；未进入 WP-12。
+- 本记录只关闭 WP-11，不声称 WP-23 persistence orchestration 已实现，也不改变既有 Requirement/PV ownership。

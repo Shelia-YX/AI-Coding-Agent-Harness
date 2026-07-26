@@ -1,0 +1,563 @@
+{
+  "vectors": [
+    {
+      "entries": [
+        {
+          "byte_length": 122,
+          "encoded_bytes": "09780901061169676e6f7265642f696e7075742e74787402040c726567756c61725f66696c6503020106040520aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa05040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "entry[0]",
+          "fields": [
+            {
+              "byte_length": 20,
+              "encoded_bytes": "01061169676e6f7265642f696e7075742e747874",
+              "field_name": "path",
+              "offset": 205
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "02040c726567756c61725f66696c65",
+              "field_name": "kind",
+              "offset": 225
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "03020106",
+              "field_name": "size",
+              "offset": 240
+            },
+            {
+              "byte_length": 35,
+              "encoded_bytes": "040520aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "field_name": "content_digest",
+              "offset": 244
+            },
+            {
+              "byte_length": 18,
+              "encoded_bytes": "05040f726561645f6f6e6c795f696e707574",
+              "field_name": "mode",
+              "offset": 279
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "06080c010409455845435554494e47",
+              "field_name": "allowed_stages",
+              "offset": 297
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "07030100",
+              "field_name": "changeset_eligible",
+              "offset": 312
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "08030100",
+              "field_name": "writeback_permitted",
+              "offset": 316
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "09030100",
+              "field_name": "exportable_to_llm",
+              "offset": 320
+            }
+          ],
+          "offset": 202
+        }
+      ],
+      "id": "genesis-minimal",
+      "length": 324,
+      "root_fields": [
+        {
+          "byte_length": 35,
+          "encoded_bytes": "010520e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5",
+          "field_name": "identity",
+          "offset": 50
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "02020101",
+          "field_name": "revision",
+          "offset": 85
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0305200000000000000000000000000000000000000000000000000000000000000000",
+          "field_name": "baseline_digest",
+          "offset": 89
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0405201111111111111111111111111111111111111111111111111111111111111111",
+          "field_name": "approval_intent_digest",
+          "offset": 124
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "05052038e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f",
+          "field_name": "workspace_logical_identity",
+          "offset": 159
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "06030100",
+          "field_name": "exportable_to_llm",
+          "offset": 194
+        },
+        {
+          "byte_length": 126,
+          "encoded_bytes": "07087b0109780901061169676e6f7265642f696e7075742e74787402040c726567756c61725f66696c6503020106040520aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa05040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "entries",
+          "offset": 198
+        }
+      ],
+      "sha256": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "top_level": [
+        {
+          "byte_length": 1,
+          "encoded_bytes": "2c",
+          "field_name": "domain_length",
+          "offset": 0
+        },
+        {
+          "byte_length": 44,
+          "encoded_bytes": "636f64696e672d6861726e6573733a73616e64626f782d696e7075742d6d616e69666573742d646967657374",
+          "field_name": "domain",
+          "offset": 1
+        },
+        {
+          "byte_length": 1,
+          "encoded_bytes": "01",
+          "field_name": "schema_version",
+          "offset": 45
+        },
+        {
+          "byte_length": 278,
+          "encoded_bytes": "09930207010520e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5020201010305200000000000000000000000000000000000000000000000000000000000000000040520111111111111111111111111111111111111111111111111111111111111111105052038e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f0603010007087b0109780901061169676e6f7265642f696e7075742e74787402040c726567756c61725f66696c6503020106040520aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa05040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "root_struct",
+          "offset": 46
+        }
+      ],
+      "validation": {
+        "entries_no_gap_or_overlap": true,
+        "root_no_gap_or_overlap": true,
+        "top_level_no_gap_or_overlap": true,
+        "trailing_bytes": 0
+      }
+    },
+    {
+      "entries": [
+        {
+          "byte_length": 133,
+          "encoded_bytes": "0982010901060d69676e6f7265642f612e74787402040c726567756c61725f66696c6503020103040520cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e47070301000803010009030100",
+          "field_name": "entry[0]",
+          "fields": [
+            {
+              "byte_length": 16,
+              "encoded_bytes": "01060d69676e6f7265642f612e747874",
+              "field_name": "path",
+              "offset": 207
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "02040c726567756c61725f66696c65",
+              "field_name": "kind",
+              "offset": 223
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "03020103",
+              "field_name": "size",
+              "offset": 238
+            },
+            {
+              "byte_length": 35,
+              "encoded_bytes": "040520cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "field_name": "content_digest",
+              "offset": 242
+            },
+            {
+              "byte_length": 21,
+              "encoded_bytes": "0504127772697461626c655f657068656d6572616c",
+              "field_name": "mode",
+              "offset": 277
+            },
+            {
+              "byte_length": 26,
+              "encoded_bytes": "060817020409455845435554494e470409564552494659494e47",
+              "field_name": "allowed_stages",
+              "offset": 298
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "07030100",
+              "field_name": "changeset_eligible",
+              "offset": 324
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "08030100",
+              "field_name": "writeback_permitted",
+              "offset": 328
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "09030100",
+              "field_name": "exportable_to_llm",
+              "offset": 332
+            }
+          ],
+          "offset": 203
+        },
+        {
+          "byte_length": 133,
+          "encoded_bytes": "0982010901060d69676e6f7265642f7a2e74787402040c726567756c61725f66696c6503020109040520bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e47070301000803010009030100",
+          "field_name": "entry[1]",
+          "fields": [
+            {
+              "byte_length": 16,
+              "encoded_bytes": "01060d69676e6f7265642f7a2e747874",
+              "field_name": "path",
+              "offset": 340
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "02040c726567756c61725f66696c65",
+              "field_name": "kind",
+              "offset": 356
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "03020109",
+              "field_name": "size",
+              "offset": 371
+            },
+            {
+              "byte_length": 35,
+              "encoded_bytes": "040520bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "field_name": "content_digest",
+              "offset": 375
+            },
+            {
+              "byte_length": 21,
+              "encoded_bytes": "0504127772697461626c655f657068656d6572616c",
+              "field_name": "mode",
+              "offset": 410
+            },
+            {
+              "byte_length": 26,
+              "encoded_bytes": "060817020409455845435554494e470409564552494659494e47",
+              "field_name": "allowed_stages",
+              "offset": 431
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "07030100",
+              "field_name": "changeset_eligible",
+              "offset": 457
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "08030100",
+              "field_name": "writeback_permitted",
+              "offset": 461
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "09030100",
+              "field_name": "exportable_to_llm",
+              "offset": 465
+            }
+          ],
+          "offset": 336
+        }
+      ],
+      "id": "genesis-multi",
+      "length": 469,
+      "root_fields": [
+        {
+          "byte_length": 35,
+          "encoded_bytes": "010520aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b5",
+          "field_name": "identity",
+          "offset": 50
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "02020101",
+          "field_name": "revision",
+          "offset": 85
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0305201111111111111111111111111111111111111111111111111111111111111111",
+          "field_name": "baseline_digest",
+          "offset": 89
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0405202222222222222222222222222222222222222222222222222222222222222222",
+          "field_name": "approval_intent_digest",
+          "offset": 124
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0505208d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf27",
+          "field_name": "workspace_logical_identity",
+          "offset": 159
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "06030100",
+          "field_name": "exportable_to_llm",
+          "offset": 194
+        },
+        {
+          "byte_length": 271,
+          "encoded_bytes": "07088b02020982010901060d69676e6f7265642f612e74787402040c726567756c61725f66696c6503020103040520cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e470703010008030100090301000982010901060d69676e6f7265642f7a2e74787402040c726567756c61725f66696c6503020109040520bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e47070301000803010009030100",
+          "field_name": "entries",
+          "offset": 198
+        }
+      ],
+      "sha256": "35acc09a22c9ea553486ca13df145ede3301a301f564ec47a91b6bbae6e7c4e5",
+      "top_level": [
+        {
+          "byte_length": 1,
+          "encoded_bytes": "2c",
+          "field_name": "domain_length",
+          "offset": 0
+        },
+        {
+          "byte_length": 44,
+          "encoded_bytes": "636f64696e672d6861726e6573733a73616e64626f782d696e7075742d6d616e69666573742d646967657374",
+          "field_name": "domain",
+          "offset": 1
+        },
+        {
+          "byte_length": 1,
+          "encoded_bytes": "01",
+          "field_name": "schema_version",
+          "offset": 45
+        },
+        {
+          "byte_length": 423,
+          "encoded_bytes": "09a40307010520aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b502020101030520111111111111111111111111111111111111111111111111111111111111111104052022222222222222222222222222222222222222222222222222222222222222220505208d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf270603010007088b02020982010901060d69676e6f7265642f612e74787402040c726567756c61725f66696c6503020103040520cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e470703010008030100090301000982010901060d69676e6f7265642f7a2e74787402040c726567756c61725f66696c6503020109040520bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0504127772697461626c655f657068656d6572616c060817020409455845435554494e470409564552494659494e47070301000803010009030100",
+          "field_name": "root_struct",
+          "offset": 46
+        }
+      ],
+      "validation": {
+        "entries_no_gap_or_overlap": true,
+        "root_no_gap_or_overlap": true,
+        "top_level_no_gap_or_overlap": true,
+        "trailing_bytes": 0
+      }
+    },
+    {
+      "entries": [
+        {
+          "byte_length": 121,
+          "encoded_bytes": "09770901061069676e6f7265642f6e6578742e74787402040c726567756c61725f66696c650302010c040520777777777777777777777777777777777777777777777777777777777777777705040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "entry[0]",
+          "fields": [
+            {
+              "byte_length": 19,
+              "encoded_bytes": "01061069676e6f7265642f6e6578742e747874",
+              "field_name": "path",
+              "offset": 206
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "02040c726567756c61725f66696c65",
+              "field_name": "kind",
+              "offset": 225
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "0302010c",
+              "field_name": "size",
+              "offset": 240
+            },
+            {
+              "byte_length": 35,
+              "encoded_bytes": "0405207777777777777777777777777777777777777777777777777777777777777777",
+              "field_name": "content_digest",
+              "offset": 244
+            },
+            {
+              "byte_length": 18,
+              "encoded_bytes": "05040f726561645f6f6e6c795f696e707574",
+              "field_name": "mode",
+              "offset": 279
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "06080c010409455845435554494e47",
+              "field_name": "allowed_stages",
+              "offset": 297
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "07030100",
+              "field_name": "changeset_eligible",
+              "offset": 312
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "08030100",
+              "field_name": "writeback_permitted",
+              "offset": 316
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "09030100",
+              "field_name": "exportable_to_llm",
+              "offset": 320
+            }
+          ],
+          "offset": 203
+        },
+        {
+          "byte_length": 122,
+          "encoded_bytes": "09780901061169676e6f7265642f7072696f722e74787402040c726567756c61725f66696c6503020105040520888888888888888888888888888888888888888888888888888888888888888805040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "entry[1]",
+          "fields": [
+            {
+              "byte_length": 20,
+              "encoded_bytes": "01061169676e6f7265642f7072696f722e747874",
+              "field_name": "path",
+              "offset": 327
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "02040c726567756c61725f66696c65",
+              "field_name": "kind",
+              "offset": 347
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "03020105",
+              "field_name": "size",
+              "offset": 362
+            },
+            {
+              "byte_length": 35,
+              "encoded_bytes": "0405208888888888888888888888888888888888888888888888888888888888888888",
+              "field_name": "content_digest",
+              "offset": 366
+            },
+            {
+              "byte_length": 18,
+              "encoded_bytes": "05040f726561645f6f6e6c795f696e707574",
+              "field_name": "mode",
+              "offset": 401
+            },
+            {
+              "byte_length": 15,
+              "encoded_bytes": "06080c010409455845435554494e47",
+              "field_name": "allowed_stages",
+              "offset": 419
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "07030100",
+              "field_name": "changeset_eligible",
+              "offset": 434
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "08030100",
+              "field_name": "writeback_permitted",
+              "offset": 438
+            },
+            {
+              "byte_length": 4,
+              "encoded_bytes": "09030100",
+              "field_name": "exportable_to_llm",
+              "offset": 442
+            }
+          ],
+          "offset": 324
+        }
+      ],
+      "id": "continuation-single-entry",
+      "length": 446,
+      "root_fields": [
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0105208c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9",
+          "field_name": "identity",
+          "offset": 50
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "02020102",
+          "field_name": "revision",
+          "offset": 85
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0305204444444444444444444444444444444444444444444444444444444444444444",
+          "field_name": "baseline_digest",
+          "offset": 89
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "0405203333333333333333333333333333333333333333333333333333333333333333",
+          "field_name": "approval_intent_digest",
+          "offset": 124
+        },
+        {
+          "byte_length": 35,
+          "encoded_bytes": "05052086ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0",
+          "field_name": "workspace_logical_identity",
+          "offset": 159
+        },
+        {
+          "byte_length": 4,
+          "encoded_bytes": "06030100",
+          "field_name": "exportable_to_llm",
+          "offset": 194
+        },
+        {
+          "byte_length": 248,
+          "encoded_bytes": "0708f4010209770901061069676e6f7265642f6e6578742e74787402040c726567756c61725f66696c650302010c040520777777777777777777777777777777777777777777777777777777777777777705040f726561645f6f6e6c795f696e70757406080c010409455845435554494e4707030100080301000903010009780901061169676e6f7265642f7072696f722e74787402040c726567756c61725f66696c6503020105040520888888888888888888888888888888888888888888888888888888888888888805040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "entries",
+          "offset": 198
+        }
+      ],
+      "sha256": "5503b9f1b4d02d3e6143f2ae69d3e9641d930e0ea9759148ff9905a74077fd8e",
+      "top_level": [
+        {
+          "byte_length": 1,
+          "encoded_bytes": "2c",
+          "field_name": "domain_length",
+          "offset": 0
+        },
+        {
+          "byte_length": 44,
+          "encoded_bytes": "636f64696e672d6861726e6573733a73616e64626f782d696e7075742d6d616e69666573742d646967657374",
+          "field_name": "domain",
+          "offset": 1
+        },
+        {
+          "byte_length": 1,
+          "encoded_bytes": "01",
+          "field_name": "schema_version",
+          "offset": 45
+        },
+        {
+          "byte_length": 400,
+          "encoded_bytes": "098d03070105208c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9020201020305204444444444444444444444444444444444444444444444444444444444444444040520333333333333333333333333333333333333333333333333333333333333333305052086ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0060301000708f4010209770901061069676e6f7265642f6e6578742e74787402040c726567756c61725f66696c650302010c040520777777777777777777777777777777777777777777777777777777777777777705040f726561645f6f6e6c795f696e70757406080c010409455845435554494e4707030100080301000903010009780901061169676e6f7265642f7072696f722e74787402040c726567756c61725f66696c6503020105040520888888888888888888888888888888888888888888888888888888888888888805040f726561645f6f6e6c795f696e70757406080c010409455845435554494e47070301000803010009030100",
+          "field_name": "root_struct",
+          "offset": 46
+        }
+      ],
+      "validation": {
+        "entries_no_gap_or_overlap": true,
+        "root_no_gap_or_overlap": true,
+        "top_level_no_gap_or_overlap": true,
+        "trailing_bytes": 0
+      }
+    }
+  ]
+}

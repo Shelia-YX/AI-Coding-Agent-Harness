@@ -1,0 +1,222 @@
+WP-11 identity v1 — Vector 1 frozen annotation evidence
+
+Status
+------
+review_decision: CANDIDATE_DIGESTS_APPROVED
+evidence_status: APPROVED_FOR_EVIDENCE_FREEZE
+json_is_evidence_container_not_identity_serialization: true
+decoder_conformance: DEFERRED_TO_DECODER_CONFORMANCE_TESTS
+decoder_conformance_scope: OUT_OF_SCOPE_FOR_VECTOR_FREEZE
+reproducibility_rerun: DEFERRED
+reproducibility_reason: scripts do not support a non-overwriting output root
+
+Evidence artifact hashes
+------------------------
+input_projection_sha256: aa2cee0e4c2c3daaf508f6be9421d4597ee2e52dc98d256a984dd262f837066d
+encoder_a_script_sha256: 89b3e6cc65eb6bf50ce802ddd8a78b10bf435c293e9723aed22020623f5f9d9b
+encoder_a_result_sha256: 0b126e114d8fb9d8c38239467e511ccb0a302a860714d87a925d93654781dc25
+oracle_b_script_sha256: 2eb1d38cb13280f2a5cc03c3ae046f948c42de42cc8f28bbc706b1fe24217d26
+oracle_b_result_sha256: 63c5aaf89e3e06bd289ed9ef9e56a6984b3b1a5996a23cc658fd6fee273686d1
+
+Human-readable input tree
+-------------------------
+id: genesis-minimal
+input:
+  task_id: task:vector:genesis
+  plan_version_identity: plan:vector:1
+  baseline_digest: 0000000000000000000000000000000000000000000000000000000000000000
+  previous:
+    variant: genesis
+  new_revision: 1
+  entries:
+    - source_repo_path: ignored/input.txt
+      file_type: regular_file
+      approved_size: 6
+      content_digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      mode: read_only_input
+      allowed_stages:
+        - EXECUTING
+  idempotency_key: ignored:vector:genesis
+  validation_limits:
+    max_input_count: 1
+    max_input_bytes: 6
+
+Derived destination tree
+------------------------
+classification: audit evidence only; not builder input
+rule: destination_repo_path = source_repo_path interpreted in TaskWorkspace namespace
+entries:
+  - source_repo_path: ignored/input.txt
+    destination_repo_path: ignored/input.txt
+encoder_a_oracle_b_match: true
+
+Workspace canonical stream
+--------------------------
+stream_length: 119
+sha256: 38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f
+continuous_raw_hex:
+29636f64696e672d6861726e6573733a776f726b73706163652d6c6f676963616c2d6964656e7469747901094a030101137461736b3a766563746f723a67656e6573697302010d706c616e3a766563746f723a310305200000000000000000000000000000000000000000000000000000000000000000
+
+hexdump_16_bytes:
+00000000  29 63 6f 64 69 6e 67 2d 68 61 72 6e 65 73 73 3a  |)coding-harness:|
+00000010  77 6f 72 6b 73 70 61 63 65 2d 6c 6f 67 69 63 61  |workspace-logica|
+00000020  6c 2d 69 64 65 6e 74 69 74 79 01 09 4a 03 01 01  |l-identity..J...|
+00000030  13 74 61 73 6b 3a 76 65 63 74 6f 72 3a 67 65 6e  |.task:vector:gen|
+00000040  65 73 69 73 02 01 0d 70 6c 61 6e 3a 76 65 63 74  |esis...plan:vect|
+00000050  6f 72 3a 31 03 05 20 00 00 00 00 00 00 00 00 00  |or:1.. .........|
+00000060  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000070  00 00 00 00 00 00 00                             |.......|
+
+offset_table (end-exclusive):
+start	end	length	label	hex
+0	1	1	workspace.domain_length	29
+1	42	41	workspace.domain	636f64696e672d6861726e6573733a776f726b73706163652d6c6f676963616c2d6964656e74697479
+42	43	1	workspace.schema	01
+43	44	1	workspace.root.type	09
+44	45	1	workspace.root.payload_length	4a
+45	46	1	workspace.root.field_count	03
+46	47	1	workspace.field1.field_tag	01
+47	48	1	workspace.task_id.type	01
+48	49	1	workspace.task_id.payload_length	13
+49	68	19	workspace.task_id.utf8	7461736b3a766563746f723a67656e65736973
+68	69	1	workspace.field2.field_tag	02
+69	70	1	workspace.plan_version_identity.type	01
+70	71	1	workspace.plan_version_identity.payload_length	0d
+71	84	13	workspace.plan_version_identity.utf8	706c616e3a766563746f723a31
+84	85	1	workspace.field3.field_tag	03
+85	86	1	workspace.baseline_digest.type	05
+86	87	1	workspace.baseline_digest.payload_length	20
+87	119	32	workspace.baseline_digest.raw32	0000000000000000000000000000000000000000000000000000000000000000
+
+Expected canonical stream
+-------------------------
+stream_length: 332
+sha256: e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5
+continuous_raw_hex:
+2e636f64696e672d6861726e6573733a73616e64626f782d696e7075742d65787065637465642d6964656e7469747901099902080101137461736b3a766563746f723a67656e6573697302010d706c616e3a766563746f723a31030520000000000000000000000000000000000000000000000000000000000000000004052038e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f050a04000901000602010107088401010980010701061169676e6f7265642f696e7075742e74787402040c726567756c61725f66696c6503020106040520aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa05040f726561645f6f6e6c795f696e70757406080c010409455845435554494e4707061169676e6f7265642f696e7075742e74787408011669676e6f7265643a766563746f723a67656e65736973
+
+hexdump_16_bytes:
+00000000  2e 63 6f 64 69 6e 67 2d 68 61 72 6e 65 73 73 3a  |.coding-harness:|
+00000010  73 61 6e 64 62 6f 78 2d 69 6e 70 75 74 2d 65 78  |sandbox-input-ex|
+00000020  70 65 63 74 65 64 2d 69 64 65 6e 74 69 74 79 01  |pected-identity.|
+00000030  09 99 02 08 01 01 13 74 61 73 6b 3a 76 65 63 74  |.......task:vect|
+00000040  6f 72 3a 67 65 6e 65 73 69 73 02 01 0d 70 6c 61  |or:genesis...pla|
+00000050  6e 3a 76 65 63 74 6f 72 3a 31 03 05 20 00 00 00  |n:vector:1.. ...|
+00000060  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+00000070  00 00 00 00 00 00 00 00 00 00 00 00 00 04 05 20  |............... |
+00000080  38 e9 4d 8a 65 1e 0f 6c 14 63 77 41 c6 fc bc ac  |8.M.e..l.cwA....|
+00000090  7e c2 2a ad 68 fa 88 07 6b 33 1a c1 dc af 98 7f  |~.*.h...k3......|
+000000a0  05 0a 04 00 09 01 00 06 02 01 01 07 08 84 01 01  |................|
+000000b0  09 80 01 07 01 06 11 69 67 6e 6f 72 65 64 2f 69  |.......ignored/i|
+000000c0  6e 70 75 74 2e 74 78 74 02 04 0c 72 65 67 75 6c  |nput.txt...regul|
+000000d0  61 72 5f 66 69 6c 65 03 02 01 06 04 05 20 aa aa  |ar_file...... ..|
+000000e0  aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa  |................|
+000000f0  aa aa aa aa aa aa aa aa aa aa aa aa aa aa 05 04  |................|
+00000100  0f 72 65 61 64 5f 6f 6e 6c 79 5f 69 6e 70 75 74  |.read_only_input|
+00000110  06 08 0c 01 04 09 45 58 45 43 55 54 49 4e 47 07  |......EXECUTING.|
+00000120  06 11 69 67 6e 6f 72 65 64 2f 69 6e 70 75 74 2e  |..ignored/input.|
+00000130  74 78 74 08 01 16 69 67 6e 6f 72 65 64 3a 76 65  |txt...ignored:ve|
+00000140  63 74 6f 72 3a 67 65 6e 65 73 69 73              |ctor:genesis|
+
+offset_table (end-exclusive):
+start	end	length	label	hex
+0	1	1	expected.domain_length	2e
+1	47	46	expected.domain	636f64696e672d6861726e6573733a73616e64626f782d696e7075742d65787065637465642d6964656e74697479
+47	48	1	expected.schema	01
+48	49	1	expected.root.type	09
+49	51	2	expected.root.payload_length	9902
+51	52	1	expected.root.field_count	08
+52	53	1	expected.field1.field_tag	01
+53	54	1	expected.task_id.type	01
+54	55	1	expected.task_id.payload_length	13
+55	74	19	expected.task_id.utf8	7461736b3a766563746f723a67656e65736973
+74	75	1	expected.field2.field_tag	02
+75	76	1	expected.plan_version_identity.type	01
+76	77	1	expected.plan_version_identity.payload_length	0d
+77	90	13	expected.plan_version_identity.utf8	706c616e3a766563746f723a31
+90	91	1	expected.field3.field_tag	03
+91	92	1	expected.baseline_digest.type	05
+92	93	1	expected.baseline_digest.payload_length	20
+93	125	32	expected.baseline_digest.raw32	0000000000000000000000000000000000000000000000000000000000000000
+125	126	1	expected.field4.field_tag	04
+126	127	1	expected.workspace_logical_identity.type	05
+127	128	1	expected.workspace_logical_identity.payload_length	20
+128	160	32	expected.workspace_logical_identity.raw32	38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f
+160	161	1	expected.field5.field_tag	05
+161	162	1	expected.previous.type	0a
+162	163	1	expected.previous.payload_length	04
+163	164	1	expected.previous.variant_tag	00
+164	165	1	expected.previous.genesis.type	09
+165	166	1	expected.previous.genesis.payload_length	01
+166	167	1	expected.previous.genesis.field_count	00
+167	168	1	expected.field6.field_tag	06
+168	169	1	expected.new_revision.type	02
+169	170	1	expected.new_revision.payload_length	01
+170	171	1	expected.new_revision.varuint	01
+171	172	1	expected.field7.field_tag	07
+172	173	1	expected.entries.type	08
+173	175	2	expected.entries.payload_length	8401
+175	176	1	expected.entries.element_count	01
+176	177	1	expected.entries[0].type	09
+177	179	2	expected.entries[0].payload_length	8001
+179	180	1	expected.entries[0].field_count	07
+180	181	1	expected.entries[0].field1.field_tag	01
+181	182	1	expected.entries[0].source.type	06
+182	183	1	expected.entries[0].source.payload_length	11
+183	200	17	expected.entries[0].source.canonical_utf8	69676e6f7265642f696e7075742e747874
+200	201	1	expected.entries[0].field2.field_tag	02
+201	202	1	expected.entries[0].file_type.type	04
+202	203	1	expected.entries[0].file_type.payload_length	0c
+203	215	12	expected.entries[0].file_type.ascii	726567756c61725f66696c65
+215	216	1	expected.entries[0].field3.field_tag	03
+216	217	1	expected.entries[0].approved_size.type	02
+217	218	1	expected.entries[0].approved_size.payload_length	01
+218	219	1	expected.entries[0].approved_size.varuint	06
+219	220	1	expected.entries[0].field4.field_tag	04
+220	221	1	expected.entries[0].content_digest.type	05
+221	222	1	expected.entries[0].content_digest.payload_length	20
+222	254	32	expected.entries[0].content_digest.raw32	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+254	255	1	expected.entries[0].field5.field_tag	05
+255	256	1	expected.entries[0].mode.type	04
+256	257	1	expected.entries[0].mode.payload_length	0f
+257	272	15	expected.entries[0].mode.ascii	726561645f6f6e6c795f696e707574
+272	273	1	expected.entries[0].field6.field_tag	06
+273	274	1	expected.entries[0].stages.type	08
+274	275	1	expected.entries[0].stages.payload_length	0c
+275	276	1	expected.entries[0].stages.element_count	01
+276	277	1	expected.entries[0].stage[EXECUTING].type	04
+277	278	1	expected.entries[0].stage[EXECUTING].payload_length	09
+278	287	9	expected.entries[0].stage[EXECUTING].ascii	455845435554494e47
+287	288	1	expected.entries[0].field7.field_tag	07
+288	289	1	expected.entries[0].destination.type	06
+289	290	1	expected.entries[0].destination.payload_length	11
+290	307	17	expected.entries[0].destination.canonical_utf8	69676e6f7265642f696e7075742e747874
+307	308	1	expected.field8.field_tag	08
+308	309	1	expected.idempotency_key.type	01
+309	310	1	expected.idempotency_key.payload_length	16
+310	332	22	expected.idempotency_key.utf8	69676e6f7265643a766563746f723a67656e65736973
+
+Manual review checklist
+-----------------------
+workspace_domain_length_and_bytes: PASS
+workspace_schema_v1: PASS
+workspace_root_struct_and_payload: PASS
+workspace_field_count_3_and_tags_1_to_3: PASS
+workspace_task_plan_baseline: PASS
+expected_domain_length_and_bytes: PASS
+expected_schema_v1: PASS
+expected_root_struct_and_payload: PASS
+expected_field_count_8_and_tags_1_to_8: PASS
+expected_field4_equals_workspace_digest_raw32: PASS
+genesis_variant_tag_0_and_empty_struct: PASS
+entry_field_count_7: PASS
+source_tag_1_destination_tag_7: PASS
+stages_contains_only_EXECUTING: PASS
+idempotency_key: PASS
+encoder_a_oracle_b_byte_for_byte: PASS
+offset_starts_at_zero: PASS
+no_gap: PASS
+no_overlap: PASS
+no_trailing_bytes: PASS
+payload_lengths_match_actual_bytes: PASS
+container_counts_match_children: PASS

@@ -1,0 +1,117 @@
+{
+  "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+  "baseline_vector": "genesis-minimal",
+  "coverage": {
+    "all_changed": true,
+    "encoder_a_oracle_b_equal": true,
+    "entry_fields": 9,
+    "root_fields": 6
+  },
+  "mutations": [
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.identity",
+      "mutated_digest": "97b82048730c2f933669f9ecb70d2c00e3cdd19caf78bf319fbe1be132dcf121"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.revision",
+      "mutated_digest": "923514662dd15d8c3e87a33780ea9de6b3d3027a86e2036d037a7997b42ca0cb"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.baseline_digest",
+      "mutated_digest": "d4b4ee1b0960f61136aa74f3c777bf156051f57e0133fa33957c6d7c4dec0bdd"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.approval_intent_digest",
+      "mutated_digest": "09810f5b1ae45fce2c58f5b520e47c9e0676e2b4b1c622a676e169f260af6a85"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.workspace_logical_identity",
+      "mutated_digest": "e73c33b5219eb5e20269517d7cfe6de58a8274a22e8461fccbebdd193e776d6e"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "root.exportable_to_llm",
+      "mutated_digest": "e771579f8d3ba1d9eef8fe879c6f8eec6a0d469f0707a472cc140c3a4338e5a3"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.path",
+      "mutated_digest": "c1af251dd6da2ae07c0f78d870689c526afa4736c6596d56a12c5cd189724708"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.kind",
+      "mutated_digest": "68c83d4f1226ea11d146f4440378b37b4ddc5272531589310c9e6c9d1a6f2fc2"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.size",
+      "mutated_digest": "f08dda139cd99ed13a52f3dea95fb78c391777dedb0a51f2450bffc4becaa5fd"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.content_digest",
+      "mutated_digest": "d7697aa6508bbb318b1e3bd1a7aa9a782843d4ddc48403225e943689b8ff263c"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.mode",
+      "mutated_digest": "1e20c19e05555624c1302119ef471212183289ecc0c689349f2ae9c4a2515141"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.allowed_stages",
+      "mutated_digest": "4e4ba4840f4208c885da7d6eaf76b97521f8bae2a2be178c44ffa34938a4cc2b"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.changeset_eligible",
+      "mutated_digest": "223f3ec5a8e411a46448a93f09616dcbe850c65c26e83b532357f458dbedf836"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.writeback_permitted",
+      "mutated_digest": "02a0349c1c57d7d91b950eabf5a34a88e050fe713eba44b5231691ed330c41c4"
+    },
+    {
+      "baseline_digest": "af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed",
+      "changed": true,
+      "encoder_a_oracle_b_equal": true,
+      "field": "entry.exportable_to_llm",
+      "mutated_digest": "22b8c145070c61da72a27b829f7234c94d971bcd8b29907c55903ed1d7560132"
+    }
+  ]
+}
