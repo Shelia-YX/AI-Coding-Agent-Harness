@@ -1,0 +1,93 @@
+{
+  "schema": "wp11-manifest-digest-v1-candidate-input:1",
+  "vectors": [
+    {
+      "id": "genesis-minimal",
+      "identity": "e6afddcfd83e130635dafb4b54c403b56fb1f70919d70e52708670d614b776f5",
+      "revision": 1,
+      "baseline_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "approval_intent_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "workspace_logical_identity": "38e94d8a651e0f6c14637741c6fcbcac7ec22aad68fa88076b331ac1dcaf987f",
+      "exportable_to_llm": false,
+      "entries": [
+        {
+          "path": "ignored/input.txt",
+          "kind": "regular_file",
+          "size": 6,
+          "content_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mode": "read_only_input",
+          "allowed_stages": ["EXECUTING"],
+          "changeset_eligible": false,
+          "writeback_permitted": false,
+          "exportable_to_llm": false
+        }
+      ]
+    },
+    {
+      "id": "genesis-multi",
+      "identity": "aed196b5b8ea7e9420b414e8a4dd4e72b4e48ac5f1dfecb3ec2bb1972fcda5b5",
+      "revision": 1,
+      "baseline_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "approval_intent_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "workspace_logical_identity": "8d6857d6a53fa3ec4edc7bca6891ee81a030f29b808ee2b83c55f6b2cb67cf27",
+      "exportable_to_llm": false,
+      "entries": [
+        {
+          "path": "ignored/z.txt",
+          "kind": "regular_file",
+          "size": 9,
+          "content_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "mode": "writable_ephemeral",
+          "allowed_stages": ["EXECUTING", "VERIFYING"],
+          "changeset_eligible": false,
+          "writeback_permitted": false,
+          "exportable_to_llm": false
+        },
+        {
+          "path": "ignored/a.txt",
+          "kind": "regular_file",
+          "size": 3,
+          "content_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mode": "writable_ephemeral",
+          "allowed_stages": ["EXECUTING", "VERIFYING"],
+          "changeset_eligible": false,
+          "writeback_permitted": false,
+          "exportable_to_llm": false
+        }
+      ]
+    },
+    {
+      "id": "continuation-single-entry",
+      "identity": "8c00a0f8331c19de2ea4a9d282c4aeaec444f7436848ae3419ce10e464d915f9",
+      "revision": 2,
+      "baseline_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+      "approval_intent_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+      "workspace_logical_identity": "86ac0d68835aef7c600926f39da547a422b16ac49e67b5b5496b32821c631bc0",
+      "exportable_to_llm": false,
+      "entries": [
+        {
+          "path": "ignored/prior.txt",
+          "kind": "regular_file",
+          "size": 5,
+          "content_digest": "8888888888888888888888888888888888888888888888888888888888888888",
+          "mode": "read_only_input",
+          "allowed_stages": ["EXECUTING"],
+          "changeset_eligible": false,
+          "writeback_permitted": false,
+          "exportable_to_llm": false
+        },
+        {
+          "path": "ignored/next.txt",
+          "kind": "regular_file",
+          "size": 12,
+          "content_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+          "mode": "read_only_input",
+          "allowed_stages": ["EXECUTING"],
+          "changeset_eligible": false,
+          "writeback_permitted": false,
+          "exportable_to_llm": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "canonical_stream_identical": true,
+  "digest_a": "35acc09a22c9ea553486ca13df145ede3301a301f564ec47a91b6bbae6e7c4e5",
+  "digest_b": "35acc09a22c9ea553486ca13df145ede3301a301f564ec47a91b6bbae6e7c4e5",
+  "digest_identical": true,
+  "encoder_a_oracle_b_equal": true,
+  "input_order_a": [
+    "ignored/z.txt",
+    "ignored/a.txt"
+  ],
+  "input_order_b": [
+    "ignored/a.txt",
+    "ignored/z.txt"
+  ]
+}

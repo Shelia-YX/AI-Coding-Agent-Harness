@@ -123,6 +123,7 @@ class ExpectedManifestIdentityResult:
 
 _TYPE_UTF8 = 1
 _TYPE_UINT = 2
+_TYPE_BOOL = 3
 _TYPE_ENUM = 4
 _TYPE_DIGEST = 5
 _TYPE_REPO_PATH = 6
@@ -132,6 +133,7 @@ _TYPE_VARIANT = 10
 _IDENTITY_SCHEMA_V1 = b"\x01"
 _WORKSPACE_IDENTITY_DOMAIN = b"coding-harness:workspace-logical-identity"
 _EXPECTED_IDENTITY_DOMAIN = b"coding-harness:sandbox-input-expected-identity"
+_MANIFEST_DIGEST_DOMAIN = b"coding-harness:sandbox-input-manifest-digest"
 _VALID_STAGE_SETS = {
     ("EXECUTING",),
     ("EXECUTING", "VERIFYING"),
@@ -200,6 +202,10 @@ def _repo_path_value(value: RepoPath) -> bytes:
         _TYPE_REPO_PATH,
         value.canonical.encode("utf-8", errors="strict"),
     )
+
+
+def _bool_value(value: bool) -> bytes:
+    return _typed(_TYPE_BOOL, b"\x01" if value else b"\x00")
 
 
 def _identity_stream(domain: bytes, root: bytes) -> bytes:
@@ -431,6 +437,20 @@ def _entry_values(entry: SandboxInputEntry) -> tuple[object, ...]:
     )
 
 
+def _manifest_entry_value(entry: SandboxInputEntry) -> bytes:
+    return _struct(
+        (1, _repo_path_value(entry.path)),
+        (2, _enum(entry.kind.value)),
+        (3, _uint(entry.size)),
+        (4, _digest_value(entry.content_digest)),
+        (5, _enum(entry.mode.value)),
+        (6, _list(*(_enum(stage) for stage in entry.allowed_stages))),
+        (7, _bool_value(entry.changeset_eligible)),
+        (8, _bool_value(entry.writeback_permitted)),
+        (9, _bool_value(entry.exportable_to_llm)),
+    )
+
+
 def _manifest_digest(
     *,
     identity: str,
@@ -440,21 +460,31 @@ def _manifest_digest(
     workspace_logical_identity: str,
     entries: tuple[SandboxInputEntry, ...],
 ) -> str:
-    digest = hashlib.sha256(b"coding-harness:sandbox-input-manifest:v2")
-    for value in (
-        identity,
-        revision,
-        baseline_digest,
-        approval_intent_digest,
-        workspace_logical_identity,
-        False,
-        len(entries),
-    ):
-        _update_digest(digest, value)
-    for entry in entries:
-        for value in _entry_values(entry):
-            _update_digest(digest, value)
-    return digest.hexdigest()
+    canonical_entries = tuple(
+        sorted(
+            entries,
+            key=lambda entry: entry.path.canonical.encode(
+                "utf-8",
+                errors="strict",
+            ),
+        )
+    )
+    root = _struct(
+        (1, _digest_value(identity)),
+        (2, _uint(revision)),
+        (3, _digest_value(baseline_digest)),
+        (4, _digest_value(approval_intent_digest)),
+        (5, _digest_value(workspace_logical_identity)),
+        (6, _bool_value(False)),
+        (7, _list(*(_manifest_entry_value(entry) for entry in canonical_entries))),
+    )
+    stream = (
+        _varuint(len(_MANIFEST_DIGEST_DOMAIN))
+        + _MANIFEST_DIGEST_DOMAIN
+        + _IDENTITY_SCHEMA_V1
+        + root
+    )
+    return hashlib.sha256(stream).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)

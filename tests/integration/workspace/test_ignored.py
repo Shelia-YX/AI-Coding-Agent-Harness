@@ -47,6 +47,32 @@ _VECTOR_FIXTURE = (
     / "workspace"
     / "wp11_identity_v1_vectors.json"
 )
+_MANIFEST_DIGEST_VECTOR_INPUT = (
+    Path(__file__).resolve().parents[3]
+    / "tests"
+    / "fixtures"
+    / "workspace"
+    / "wp11_manifest_digest_v1_vectors.input.json"
+)
+_MANIFEST_DIGEST_VECTOR_OUTPUT = (
+    Path(__file__).resolve().parents[3]
+    / "tests"
+    / "fixtures"
+    / "workspace"
+    / "wp11_manifest_digest_v1_vectors.json"
+)
+
+
+def _manifest_digest_vector_cases() -> tuple[pytest.ParameterSet, ...]:
+    inputs = json.loads(_MANIFEST_DIGEST_VECTOR_INPUT.read_text(encoding="utf-8"))
+    outputs = json.loads(_MANIFEST_DIGEST_VECTOR_OUTPUT.read_text(encoding="utf-8"))
+    expected_by_id = {
+        vector["id"]: vector["sha256"] for vector in outputs["vectors"]
+    }
+    return tuple(
+        pytest.param(vector, expected_by_id[vector["id"]], id=vector["id"])
+        for vector in inputs["vectors"]
+    )
 
 
 def _api() -> SimpleNamespace:
@@ -95,6 +121,39 @@ def _git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
 
 def _digest(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+@pytest.mark.parametrize(("vector", "expected_digest"), _manifest_digest_vector_cases())
+def test_manifest_digest_v1_matches_frozen_vector(
+    vector: dict[str, object],
+    expected_digest: str,
+) -> None:
+    module = importlib.import_module("coding_harness.workspace.ignored")
+    entries = tuple(
+        module.SandboxInputEntry(
+            path=RepoPath.parse(entry["path"]),
+            kind=module.IgnoredInputKind(entry["kind"]),
+            size=entry["size"],
+            content_digest=entry["content_digest"],
+            mode=module.IgnoredInputMode(entry["mode"]),
+            allowed_stages=tuple(entry["allowed_stages"]),
+            changeset_eligible=entry["changeset_eligible"],
+            writeback_permitted=entry["writeback_permitted"],
+            exportable_to_llm=entry["exportable_to_llm"],
+        )
+        for entry in vector["entries"]
+    )
+
+    actual = module._manifest_digest(
+        identity=vector["identity"],
+        revision=vector["revision"],
+        baseline_digest=vector["baseline_digest"],
+        approval_intent_digest=vector["approval_intent_digest"],
+        workspace_logical_identity=vector["workspace_logical_identity"],
+        entries=entries,
+    )
+
+    assert actual == expected_digest
 
 
 def _repository(tmp_path: Path) -> SimpleNamespace:
