@@ -1005,3 +1005,48 @@
 - WP-11 保持既定 ownership：ignored-input governance、manifest/version、approved materialization gateway、identity/digest binding、non-export/non-writeback 与 filesystem safety。
 - 未修改 `SPEC.md`、`PLAN.md`、WP-07 Approval/Policy authority、WP-09 path/file model、WP-10 baseline authority或任何 WP-12+ 文件；未进入 WP-12。
 - 本记录只关闭 WP-11，不声称 WP-23 persistence orchestration 已实现，也不改变既有 Requirement/PV ownership。
+
+### WP-12 Interface Authority Freeze 批准与工作环境初始化
+
+本段于 `2026-07-26 13:40:03 +0800 (Asia/Shanghai)` 同期记录 `WP12_INTERFACE_AUTHORITY_FREEZE_APPROVED` 及其独立工作环境初始化。人工权威方明确批准 `WP12_ACTIVE_MANIFEST_AUTHORITY_DECISION` 与 `WP12_SYNTHETIC_BASELINE_ANCHOR_DECISION`【USER_REPORTED / APPROVED DECISION】。本段只冻结跨 WP interface/security authority boundary，不修改冻结 `SPEC.md`/`PLAN.md` 的 Requirement/PV 语义，也不声称任何 WP-12、WP-15 或 WP-23 production interface 已实现。
+
+#### Approved ACTIVE Manifest Authority boundary
+
+- ACTIVE Sandbox Input Manifest 的唯一 authority 类型冻结为 `PersistedActiveManifestAuthority`。
+- WP-15 `HarnessStore` 拥有 authoritative persistence record 与 authority issuance boundary；WP-23 `TaskService` 仅拥有 application orchestration，不得自行声明、构造、恢复或由 cache 推断 ACTIVE。
+- `PersistedActiveManifestAuthority` 必须来自 WP-15 对 current authoritative persistence record 的 trusted reread，并保持 task identity、workspace logical identity、WP-10 Baseline binding、manifest identity/digest/revision、Approval committed-consumption/CAS intent binding、persistence record identity及 currentness 一致。
+- 类型名称、caller flag、caller-declared active、`SandboxInputManifest` 参数、candidate manifest、materialization result、manifest/CAS digest、publication receipt、workspace 文件存在性、memory cache、snapshot、SSE 或临时日志均不得产生 ACTIVE authority。
+- `PUBLISHED_PENDING_COMMIT` 不是 ACTIVE，不携带 execution、Synthetic Git、ChangeSet、export、Apply 或 Recovery authority；它不得通过字段修改、状态转换、对象包装或复用原结果直接进入 ACTIVE。
+- persistence operation 后仍须通过 trusted reread 产生新的 verified authority。consumer 只能消费 verified authority；persistence 不可用、记录缺失、binding 不一致、状态陈旧或 commit 无法证明时必须表现为无 ACTIVE authority并 fail closed。
+- SQLite schema、transaction 字段、CAS 算法、migration/version、具体 Store/Application API、audit event payload及 recovery algorithm 不属于本次 WP-12 freeze，分别由后续 WP-15/WP-23 owner 在不弱化上述安全结果的前提下决定。
+
+#### Approved Synthetic Baseline Anchor boundary
+
+- Synthetic Baseline Anchor 冻结为 Harness internal、immutable、task-local、non-authoritative compatibility anchor；它不是 WP-10 `BaselineManifest`、Git truth、原仓库 HEAD/index/branch/commit/refs、当前 workspace authoritative snapshot 或 ACTIVE authority。
+- Anchor 必须由可信 Harness 从现有、已验证的 WP-10 Baseline contract 及匹配 Task Workspace binding 建立。LLM、caller、当前 workspace 扫描、Synthetic Git 自身状态、cache、materialization result 与原仓库 `.git` 不得创建、替换或刷新 anchor。
+- Anchor 与 Synthetic index 严格分离：anchor 不可变；闭合范围内的 stage/unstage 只影响 Synthetic index，不得改变 anchor、WP-10 Baseline Manifest、原仓库 index 或任何 authority。
+- Synthetic Git 仅允许冻结 SPEC 闭合清单中的 status、worktree diff、cached diff 及精确文件级 stage/unstage。commit、branch、tag、remote、merge、reset、checkout、clean、通用 config、refs、history rewrite 与 worktree restoration 保持禁止；通用 `restore` 禁止，唯一例外为闭合 `git_unstage_paths` 对应的精确 `restore --staged`，且不得修改工作树。
+- Synthetic anchor、index、objects、refs、hash 与命令输出仅是 compatibility feedback，不得成为 Approval、Manifest identity/digest、ChangeSet、Acceptance、Apply、Recovery 或 `PersistedActiveManifestAuthority` 的依据。
+- Synthetic Git 不解释 persistence truth，不把 `PUBLISHED_PENDING_COMMIT` 提升为 ACTIVE，也不替代 trusted persistence reread。
+- Synthetic Git storage、tree/object layout、index schema、内部锁/生命周期及 adapter 细节属于后续 WP-12 implementation；WP-13 ChangeSet 算法、WP-14/WP-18 recovery implementation、WP-15 persistence implementation与 WP-23 orchestration implementation保持各自既有 ownership。
+
+#### WP-10 frozen upstream dependency
+
+- WP-10 状态冻结为 `COMPLETED / MERGED / FROZEN UPSTREAM CONTRACT`。
+- 现有 `BaselineManifest`、`TaskWorkspace`、Baseline digest 与 workspace binding 是 WP-12 必须消费的既存上游 authority contract；WP-10 不是 future deferred implementation owner。
+- WP-12 不得重开、复制、替代、重新解释或扩展 WP-10 Baseline authority，也不得把当前 workspace snapshot 提升为 authoritative Baseline。
+- WP-12 不得依赖 WP-10 未公开的内部表示。若现有 public contract 无法满足已批准 anchor provenance，必须停止并发起新的 cross-WP interface decision，不得直接修改 WP-10。
+
+#### Worktree、branch 与 start gate
+
+- 创建前主 checkout 为 branch `main`、worktree clean；目标 branch/worktree 均不存在，项目本地 `.worktrees/` 由 `.gitignore` 明确忽略【VERIFIED】。
+- 刷新 `origin/main` 后，`FETCH_HEAD` 与 `origin/main` 均为 WP-11 PR #2 merge commit `3eb3c1318c5a18b01bafb7593fad79c82c839267`；本地 `main` `62cb3877118070b3b66abadcf474360bc7e7e9a3` 是其祖先。`SPEC.md`、`PLAN.md` 在该推进中无差异【VERIFIED】。
+- 从 `origin/main` 创建 branch `wp-12-interface-authority-freeze` 及 worktree `.worktrees/wp-12-interface-authority-freeze`；新 worktree HEAD 为 `3eb3c1318c5a18b01bafb7593fad79c82c839267` 并跟踪 `origin/main`【VERIFIED】。
+- 本初始化阶段的允许修改范围仅为 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`。未创建 WP-12 Red tests，未创建或修改 `src/coding_harness/workspace/synthetic_git.py`，未修改任何 production/test、`SPEC.md` 或 `PLAN.md`，未 stage、未 commit。
+
+#### Conflict review 与下一阶段
+
+- 冻结 SPEC 已明确 Synthetic Git non-authority、闭合 Git operation、WP-10 immutable Baseline/Task Workspace、Harness ChangeSet authority及 recovery/persistence边界；本次批准记录是对跨 WP interface ownership和禁止 authority shortcut 的澄清，不改变现有 Requirement/PV 语义。
+- 当前未发现 approved decision 与冻结 SPEC/PLAN 的 ownership conflict 或 cross-WP contradiction；因此无需修改 `SPEC.md`。
+- 状态：`WP12_INTERFACE_AUTHORITY_FREEZE_APPROVED / WORKSPACE_INITIALIZED`。
+- 下一合法阶段仅为 `WP12_SYNTHETIC_GIT_RED_PREPARATION`。本批准和初始化不得直接进入 production implementation；Red 文件尚未创建，Red 命令尚未执行。
