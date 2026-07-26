@@ -970,3 +970,38 @@
 - `genesis-minimal`、`genesis-multi` 与 `continuation-single-entry` 三个 base vector 均适用上述映射。Destination 由 source 派生；validation limits 仅用于校验。
 - 当前状态：public builder interface `APPROVED`；identity algorithm v1 `APPROVED`；normative vectors `FROZEN / REMOTE-SYNCED`；test-contract revision 仍为 `PAUSED`，production remediation 仍为 `PAUSED`。
 - I-1 保持 `CLOSED`；I-2、I-3、I-4 保持 `OPEN`。本次未修改 production/tests、frozen fixtures 或冻结 `SPEC.md`/`PLAN.md`，未进入 PR 或 WP-12。
+
+### WP-11 最终关闭记录
+
+本段于 `2026-07-26 12:41:39 +0800 (Asia/Shanghai)` 同期记录 WP-11 最终实现、验证与远程同步结果。最终 commit 为 `deff0382a64b67859090891de1f95b9988d30bfd`，commit subject 为 `fix(workspace): implement WP11 manifest digest v1`；本地与 `origin/wp-11-ignored-input-governance` 均指向该 commit，工作区 clean。状态明确更新为：
+
+`WP11 CLOSED`
+
+#### Finding closure
+
+- **I-1 — Approval consumption 与失败原子性：CLOSED。** 成功结果保持 `PUBLISHED_PENDING_COMMIT`，明确分离 consumed candidate、Approval CAS intent 与 candidate manifest；`active_manifest=None` 且 `persistence_committed=False`。失败路径不暴露 consumed candidate，并保持原 Approval/revision。WP-07 Approval/CAS authority 未被复制或修改。
+- **I-2 — 文件副作用与 cleanup ownership：CLOSED。** Cleanup 使用 owned receipt 绑定并在删除前复核 object type、device 与 inode；cleanup failure 独立、稳定地传播且不覆盖 primary operation reason，descriptor close failure 不伪装为成功。
+- **I-3 — Identity 与 manifest digest 完整绑定：CLOSED。** Public expected-identity builder 使用批准的 identity v1；candidate identity 与 manifest digest 保持分层。Manifest digest 使用 `coding-harness:sandbox-input-manifest-digest`、schema v1 和批准的 typed length-prefixed canonical binary encoding，绑定 identity、revision、baseline digest、Approval CAS intent digest、workspace logical identity、immutable exclusion flags 与 canonical ordered full entry set；旧 v2 domain 与 fallback 均不存在。
+- **I-4 — Path/file safety 与 bounded failure：CLOSED。** Descriptor authority、bounded I/O、source/target physical verification、owned temporary、`os.link()` no-clobber publication、替换竞争检测与 unsupported-platform fail-closed 合同均由 WP-11 regression nodes 覆盖；未退化为覆盖式 rename/replace 或路径式安全关键 publish。
+
+#### Verification evidence
+
+- Frozen manifest digest v1 vectors 三项 exact match：
+  - `genesis-minimal`：`af25dfe44494a5689c09364242261ebe066e441fc648d3a978eca23ab7f0e0ed`
+  - `genesis-multi`：`35acc09a22c9ea553486ca13df145ede3301a301f564ec47a91b6bbae6e7c4e5`
+  - `continuation-single-entry`：`5503b9f1b4d02d3e6143f2ae69d3e9641d930e0ea9759148ff9905a74077fd8e`
+- Fixture strict validation：`1 passed`；duplicate key、非法 UTF-8、NaN/Infinity、schema、stream length、SHA-256、offset partition、mutation coverage、ordering invariance 与 provenance 均受验证。
+- WP-11 integration suite：`85 passed / 0 failed / 0 errors`。
+- WP-07/WP-09/WP-10 定向 cross regression：`253 passed / 0 failed / 0 errors`。
+- `git diff --check` 通过；未生成 cache 或 bytecode。
+
+#### 实现范围与非修改边界
+
+- 最终 closure commit 精确包含：
+  - `src/coding_harness/workspace/ignored.py`
+  - `tests/integration/workspace/test_ignored.py`
+  - `tests/fixtures/workspace/wp11_manifest_digest_v1_*`
+  - `tests/unit/workspace/test_wp11_manifest_digest_fixture.py`
+- WP-11 保持既定 ownership：ignored-input governance、manifest/version、approved materialization gateway、identity/digest binding、non-export/non-writeback 与 filesystem safety。
+- 未修改 `SPEC.md`、`PLAN.md`、WP-07 Approval/Policy authority、WP-09 path/file model、WP-10 baseline authority或任何 WP-12+ 文件；未进入 WP-12。
+- 本记录只关闭 WP-11，不声称 WP-23 persistence orchestration 已实现，也不改变既有 Requirement/PV ownership。
