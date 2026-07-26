@@ -912,15 +912,21 @@ def test_remediation_i2_failure_after_write_removes_owned_temporary_artifact(
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
+    existing = case.workspace.root / "preexisting.txt"
+    existing.write_bytes(b"keep\n")
     target = case.workspace.root / "ignored" / "input.txt"
-    original_chmod = module.os.chmod
+    original_fsync = module.os.fsync
+    injected = False
 
-    def fail_target_chmod(path: object, mode: int, *args: object, **kwargs: object):
-        if Path(path) == target:
-            raise OSError("injected chmod failure")
-        return original_chmod(path, mode, *args, **kwargs)
+    def fail_temporary_sync(descriptor: int) -> None:
+        nonlocal injected
+        status = os.fstat(descriptor)
+        if stat.S_ISREG(status.st_mode) and not injected:
+            injected = True
+            raise OSError("injected temporary sync failure")
+        original_fsync(descriptor)
 
-    monkeypatch.setattr(module.os, "chmod", fail_target_chmod)
+    monkeypatch.setattr(module.os, "fsync", fail_temporary_sync)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -929,9 +935,11 @@ def test_remediation_i2_failure_after_write_removes_owned_temporary_artifact(
         authority=case.authority,
     )
 
+    assert injected is True
     _assert_denied(result)
     assert not os.path.lexists(target)
     assert not tuple(case.workspace.root.rglob(".wp11-ignored-*"))
+    assert existing.read_bytes() == b"keep\n"
     assert result.cleanup_complete is True
 
 
@@ -941,22 +949,42 @@ def test_remediation_i2_cleanup_failure_returns_stable_fail_closed_result(
 ) -> None:
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
-    target = case.workspace.root / "ignored" / "input.txt"
-    original_chmod = module.os.chmod
-    original_unlink = Path.unlink
+    original_unlink = module.os.unlink
+    original_open = module.os.open
+    replacement_name: str | None = None
+    replacement_content = b"replacement-non-owned\n"
+    replacement_status: os.stat_result | None = None
 
-    def fail_target_chmod(path: object, mode: int, *args: object, **kwargs: object):
-        if Path(path) == target:
-            raise OSError("injected chmod failure")
-        return original_chmod(path, mode, *args, **kwargs)
+    def fail_temporary_fchmod(descriptor: int, mode: int) -> None:
+        del descriptor, mode
+        raise OSError("injected descriptor-safe mode failure")
 
-    def fail_target_unlink(path: Path, *args: object, **kwargs: object):
-        if path == target:
-            raise OSError("injected cleanup failure")
-        return original_unlink(path, *args, **kwargs)
+    def replace_before_cleanup(
+        path: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        nonlocal replacement_name, replacement_status
+        name = os.fspath(path)
+        parent_fd = kwargs.get("dir_fd")
+        if (
+            replacement_name is None
+            and name.startswith(".wp11-ignored-")
+            and type(parent_fd) is int
+        ):
+            replacement_status = _descriptor_replace(
+                original_unlink=original_unlink,
+                original_open=original_open,
+                parent_fd=parent_fd,
+                name=name,
+                content=replacement_content,
+            )
+            replacement_name = name
+            raise OSError("injected descriptor-relative cleanup failure")
+        original_unlink(path, *args, **kwargs)
 
-    monkeypatch.setattr(module.os, "chmod", fail_target_chmod)
-    monkeypatch.setattr(Path, "unlink", fail_target_unlink)
+    monkeypatch.setattr(module.os, "fchmod", fail_temporary_fchmod)
+    monkeypatch.setattr(module.os, "unlink", replace_before_cleanup)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -970,6 +998,11 @@ def test_remediation_i2_cleanup_failure_returns_stable_fail_closed_result(
     assert result.cleanup_complete is False
     assert result.operation_reason == "IGNORED_INPUT_MATERIALIZATION_FAILED"
     assert result.active_manifest is None
+    assert replacement_name is not None
+    assert replacement_status is not None
+    replacement = case.workspace.root / "ignored" / replacement_name
+    assert replacement.read_bytes() == replacement_content
+    assert replacement.stat().st_ino == replacement_status.st_ino
 
 
 def test_remediation_i2_preexisting_directory_is_preserved(
@@ -1197,20 +1230,37 @@ def test_remediation_i4_destination_parent_replacement_rejected(
     case = _valid_case(tmp_path)
     module = importlib.import_module("coding_harness.workspace.ignored")
     destination_parent = case.workspace.root / "ignored"
+    moved_parent = case.workspace.root / "ignored-original"
     outside = tmp_path / "outside"
     outside.mkdir()
-    original_lstat = module.os.lstat
+    original_open = module.os.open
     replaced = False
+    workspace_root_fds: set[int] = set()
+    traversal_calls: list[tuple[str, int]] = []
 
-    def replace_before_lstat(path: object, *args: object, **kwargs: object):
+    def replace_at_openat_boundary(
+        path: object,
+        flags: int,
+        *args: object,
+        **kwargs: object,
+    ) -> int:
         nonlocal replaced
-        if Path(path) == destination_parent and not replaced:
+        name = os.fspath(path)
+        parent_fd = kwargs.get("dir_fd")
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == case.workspace.root:
+            workspace_root_fds.add(descriptor)
+        if name == "ignored" and parent_fd in workspace_root_fds:
+            traversal_calls.append((name, parent_fd))
+        if name == "ignored" and parent_fd in workspace_root_fds and not replaced:
+            os.close(descriptor)
             replaced = True
-            destination_parent.rmdir()
+            destination_parent.rename(moved_parent)
             destination_parent.symlink_to(outside, target_is_directory=True)
-        return original_lstat(path, *args, **kwargs)
+            return original_open(path, flags, *args, **kwargs)
+        return descriptor
 
-    monkeypatch.setattr(module.os, "lstat", replace_before_lstat)
+    monkeypatch.setattr(module.os, "open", replace_at_openat_boundary)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -1219,9 +1269,14 @@ def test_remediation_i4_destination_parent_replacement_rejected(
         authority=case.authority,
     )
 
+    assert replaced is True
+    assert traversal_calls
     _assert_denied(result)
     assert not (outside / "input.txt").exists()
+    assert not tuple(outside.iterdir())
+    assert not (moved_parent / "input.txt").exists()
     assert result.reason == "IGNORED_INPUT_DESTINATION_CONTAINMENT_FAILED"
+    assert result.cleanup_complete is True
 
 
 def test_remediation_i4_hardlink_source_rejected(tmp_path: Path) -> None:
@@ -2319,12 +2374,21 @@ def test_root_descriptor_authority_remains_continuous(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     case = _valid_case(tmp_path)
+    original_content = case.repository.ignored.read_bytes()
+    replacement_content = b"replacement-root-content\n"
+    replacement = _replacement_repository(tmp_path, replacement_content)
+    saved = tmp_path / "original-root-authority"
     module = importlib.import_module("coding_harness.workspace.ignored")
     original_open = module.os.open
     original_close = module.os.close
-    source_descriptors: set[int] = set()
-    source_root_opens = 0
-    closed_before_ignore = False
+    original_spawn = module.os.posix_spawnp
+    original_waitpid = module.os.waitpid
+    authority_descriptors: set[int] = set()
+    events: list[tuple[str, int]] = []
+    source_root_fd: int | None = None
+    source_root_live = False
+    ignore_pid: int | None = None
+    replaced = False
 
     def track_source_root(
         path: object,
@@ -2332,22 +2396,56 @@ def test_root_descriptor_authority_remains_continuous(
         *args: object,
         **kwargs: object,
     ) -> int:
-        nonlocal source_root_opens
+        nonlocal replaced, source_root_fd, source_root_live
+        parent_fd = kwargs.get("dir_fd")
+        if (
+            parent_fd in authority_descriptors
+            and not replaced
+        ):
+            replaced = True
+            os.rename(case.repository.root, saved)
+            os.rename(replacement.root, case.repository.root)
         descriptor = original_open(path, flags, *args, **kwargs)
         if Path(path) == case.repository.root:
-            source_root_opens += 1
-            source_descriptors.add(descriptor)
+            source_root_fd = descriptor
+            source_root_live = True
+            authority_descriptors.add(descriptor)
+            events.append(("root_open", descriptor))
+        elif parent_fd in authority_descriptors:
+            authority_descriptors.add(descriptor)
+            events.append(("root_authority_use", int(parent_fd)))
         return descriptor
 
     def track_source_close(descriptor: int) -> None:
-        nonlocal closed_before_ignore
-        if descriptor in source_descriptors:
-            closed_before_ignore = True
-            source_descriptors.remove(descriptor)
+        nonlocal source_root_live
+        if descriptor == source_root_fd and source_root_live:
+            events.append(("root_close", descriptor))
+            source_root_live = False
+        authority_descriptors.discard(descriptor)
         original_close(descriptor)
+
+    def track_ignore_start(*args: object, **kwargs: object) -> int:
+        nonlocal ignore_pid
+        assert source_root_fd is not None
+        events.append(("ignore_validation_start", source_root_fd))
+        ignore_pid = original_spawn(*args, **kwargs)
+        return ignore_pid
+
+    def track_ignore_completion(
+        process: int,
+        options: int,
+    ) -> tuple[int, int]:
+        waited = original_waitpid(process, options)
+        if process == ignore_pid:
+            assert source_root_fd is not None
+            events.append(("ignore_validation_complete", source_root_fd))
+            events.append(("root_authority_use", source_root_fd))
+        return waited
 
     monkeypatch.setattr(module.os, "open", track_source_root)
     monkeypatch.setattr(module.os, "close", track_source_close)
+    monkeypatch.setattr(module.os, "posix_spawnp", track_ignore_start)
+    monkeypatch.setattr(module.os, "waitpid", track_ignore_completion)
     result = _invoke(
         case.api,
         source_root=case.repository.root,
@@ -2356,6 +2454,34 @@ def test_root_descriptor_authority_remains_continuous(
         authority=case.authority,
     )
 
-    assert source_root_opens == 1
-    assert closed_before_ignore is False
+    assert source_root_fd is not None
+    root_events = [
+        (position, kind)
+        for position, (kind, descriptor) in enumerate(events)
+        if descriptor == source_root_fd
+    ]
+    assert [kind for _, kind in root_events].count("root_open") == 1
+    assert [kind for _, kind in root_events].count("root_close") == 1
+    root_open = next(
+        position for position, kind in root_events if kind == "root_open"
+    )
+    ignore_complete = next(
+        position
+        for position, kind in root_events
+        if kind == "ignore_validation_complete"
+    )
+    last_authority_use = max(
+        position
+        for position, kind in root_events
+        if kind == "root_authority_use"
+    )
+    root_close = next(
+        position for position, kind in root_events if kind == "root_close"
+    )
+    assert root_open < ignore_complete <= last_authority_use < root_close
+    assert replaced is True
+    target = case.workspace.root / "ignored" / "input.txt"
+    assert target.read_bytes() == original_content
+    assert target.read_bytes() != replacement_content
+    assert case.repository.ignored.read_bytes() == replacement_content
     _assert_pending_persistence_contract(result, case.authority)
