@@ -1190,3 +1190,65 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - WP-12 production implementation不需要额外修改；final governance documentation gap 已通过本追加记录关闭。
 - 本阶段只修改 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`，不修改 production、tests、`SPEC.md`、`PLAN.md` 或其他 WP-owned file。
 - 本记录不授权 stage、commit、push、PR 或 merge。新的 process-only commit必须等待独立 explicit authorization。
+
+### WP-12 post-merge process reconciliation
+
+本段于 `2026-07-27 12:48:54 +0800 (Asia/Shanghai)` 追加 WP-12 manual merge sequencing deviation 的 reconciliation evidence。该记录只描述已经发生的外部 merge 与事后技术核验，不追溯性创建 merge authorization，不修改既有 decision、commit 或 branch history。
+
+#### Merge event
+
+- PR #3 由人工于 `2026-07-27 12:41:35 +0800`、formal merge authorization review 完成前 merge。
+- Merge commit：`40230f758ebd26f36b639487717675cf28da2032`。
+- First parent：`3eb3c1318c5a18b01bafb7593fad79c82c839267`。
+- Reviewed head / second parent：`e9cec8e07c46dd3db03f57e9f3a95afc5e4847bd`。
+- Merge subject：`Merge pull request #3 from Shelia-YX/wp-12-interface-authority-freeze`。
+- `MERGE_AUTHORIZATION_SEQUENCE = DEVIATION`。
+
+#### Merge content verification
+
+- Merge tree：`5e951926fd96cc156d825e47c7314531acf3ccd3`。
+- Reviewed head tree：`5e951926fd96cc156d825e47c7314531acf3ccd3`。
+- Merge tree 与 reviewed head tree完全一致；reviewed head 到 merge commit 的 diff为空。
+- 未发生 conflict-resolution change、merge-induced code change、extra file或 scope expansion。
+- First-parent merge scope仍精确为：
+  - `AGENT_LOG.md`
+  - `SPEC_PROCESS.md`
+  - `src/coding_harness/workspace/synthetic_git.py`
+  - `tests/unit/workspace/test_synthetic_git.py`
+- Reviewed commit sequence保持：
+  - `3a1cdf1` — `docs(process): record WP12 interface authority freeze approval`
+  - `c5bbce4` — `feat(workspace): implement WP12 synthetic git compatibility`
+  - `e9cec8e` — `docs(process): record WP12 final closeout`
+
+#### Post-merge technical review
+
+- Technical review在人工 merge 后完成，结论为 `PASS`；该结论验证实际 merge tree，但不替代缺失的 pre-merge authorization gate。
+- Fresh WP-12 suite：`48 passed / 0 failed / 0 errors`。
+- Fresh full regression：`627 passed / 0 failed / 0 errors`。
+- Candidate Ruff：`All checks passed`。
+- Merge commit check、working tree 与 generated-artifact scan均通过/clean。
+- Frozen WP-12 contract、authority separation、known limitations 与 downstream obligations继续成立；没有新增 WP-12 implementation requirement。
+
+#### Governance reconciliation
+
+- Formal merge authorization gate被人工 merge提前越过；该 sequencing deviation是已发生事实，必须保留。
+- Technical correctness与 governance sequencing是两个独立结论：tree equality及 tests PASS证明 merge内容未漂移，但不能把 deviation改写为正常授权流程。
+- 本 reconciliation不伪装为 pre-merge approval，不补造历史授权，不改写 timestamp、decision或 reviewer chronology。
+- 未执行也不建议为隐藏 deviation而进行 revert、rebase、force push、squash、history rewrite或 branch-history修改。
+
+最终状态：
+
+- `WP12_IMPLEMENTATION = PASS`
+- `WP12_VERIFICATION = PASS`
+- `WP12_SECURITY_BOUNDARY = PASS`
+- `WP12_PR_TECHNICAL_REVIEW = PASS`
+- `WP12_MERGE_CONTENT = VERIFIED`
+- `MERGE_AUTHORIZATION_SEQUENCE = DEVIATION`
+- `WP12_TECHNICAL_CLOSEOUT = COMPLETE`
+- `WP12_GOVERNANCE_RECONCILIATION = RECORDED`
+
+#### Reconciliation process gate
+
+- 本阶段只追加 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`，不修改 production、tests、`SPEC.md`、`PLAN.md` 或其他 WP-owned file。
+- 本记录不授权 stage、commit、push、merge、revert、rebase或任何 history mutation。
+- Reconciliation documentation commit必须等待独立 explicit authorization。
