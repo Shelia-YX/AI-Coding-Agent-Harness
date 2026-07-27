@@ -1137,3 +1137,56 @@ WP-12 executable verification 只证明自身 Synthetic Anchor 与 Synthetic Git
 - 当前 expected WP-12 code artifacts 为 `src/coding_harness/workspace/synthetic_git.py` 与 `tests/unit/workspace/test_synthetic_git.py`；governance artifacts 为 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`。
 - 下一合法动作仅为 commit entry review。必须先确认 diff check、changed-file allowlist、无 staged/unrelated file、verification evidence 与 commit scope。
 - 本记录不授权 stage、commit 或 push；`COMMIT = NOT AUTHORIZED` 保持不变。
+
+### WP-12 final governance closeout record
+
+本段于 `2026-07-27 12:03:23 +0800 (Asia/Shanghai)` 追加 WP-12 final governance closeout evidence。它不修改上述历史 decision wording，不重新打开任何 frozen interface decision，也不产生新的 implementation task。状态冻结为：
+
+- `WP12_IMPLEMENTATION = PASS`
+- `WP12_SECURITY_BOUNDARY = PASS`
+- `WP12_VERIFICATION = PASS`
+- `WP12_REMOTE_SYNCHRONIZATION = PASS`
+
+#### Final commit 与 remote evidence
+
+- Final implementation commit：`c5bbce4b27faa93f12820bccae4f58cdca9640c8`。
+- Local branch：`wp-12-interface-authority-freeze`。
+- Remote branch：`origin/wp-12-interface-authority-freeze`。
+- Local HEAD 与 remote branch ref 均为 `c5bbce4b27faa93f12820bccae4f58cdca9640c8`【VERIFIED】。
+- Push 使用显式同名 remote ref；未 push `origin/main`，未 force push、rebase、merge、修改 upstream configuration 或创建 PR。
+
+#### Fresh final verification
+
+- WP-12 suite：`48 passed / 0 failed / 0 errors`。
+- Full regression：`627 passed / 0 failed / 0 errors`；此前 dirty phase deselect 的 clean-worktree sentinel 已在 committed clean state 纳入并通过。
+- Candidate Ruff：`All checks passed`。
+- Committed diff check：通过。
+- Final review 前 working tree 与 generated-artifact scan：clean。
+
+上述 fresh evidence 验证最终 committed tree；本段追加后 working tree 仅允许 `AGENT_LOG.md` 与 `SPEC_PROCESS.md` 出现 process-only diff，必须在独立授权前保持 unstaged、uncommitted、unpushed。
+
+#### Known limitations
+
+- **Synthetic Git compatibility scope limitation：** WP-12 只提供 task-local、non-authoritative compatibility context、immutable anchor、separate synthetic index 与有限 semantic feedback；它不是完整 Git repository、Git truth、WP-10 `BaselineManifest` 或 workspace authority。
+- **Unsupported Git operations：** closed allowlist 仅包含 status、diff、cached diff、stage、unstage。commit、branch、tag、remote、merge、reset、checkout、worktree restore、history rewrite、clean、refs mutation、unsafe options/pathspec magic及 range-style index operation保持按设计拒绝；这不是待补 implementation。
+- **Compatibility feedback formatting limitation：** feedback 仅提供 bounded semantic path/added-line/removed-line facts，不承诺完整 Git textual output、patch formatting、ordering、object/hash representation或稳定 human-facing error message。Downstream 不得把 formatting 或 feedback 升格为 authority。
+- **INTERNAL_FAILURE coverage limitation：** production boundary 提供独立 `INTERNAL_FAILURE` disposition，并保证 unexpected failure 不转换为 REJECTED；当前 executable suite 不包含 deterministic fault-injection test hook。为补此覆盖而新增 private injection、mock production、test-only production hook或冻结 exception/result representation均仍被禁止。
+
+这些限制均位于已冻结 WP-12 compatibility boundary 内，不要求重开 interface decision，也不产生新的 WP-12 implementation task。
+
+#### Ownership separation retained
+
+WP-12 final closeout 不声称、实现或验证完成以下 downstream-owned authority：
+
+- ACTIVE Manifest Authority 与 authoritative persistence truth：WP-15 ownership。
+- Application orchestration authority：WP-23 ownership。
+- ChangeSet authority：WP-13 ownership。
+- Recovery evidence 与 recovery algorithm：WP-14/WP-18 ownership。
+
+Synthetic anchor、index、context、disposition、hash 与 compatibility feedback均不得成为上述 authority 的替代来源。Remaining cross-WP verification obligations继续适用前述 WP-15/WP-23、WP-13 与 WP-14/WP-18 分工。
+
+#### Final process gate
+
+- WP-12 production implementation不需要额外修改；final governance documentation gap 已通过本追加记录关闭。
+- 本阶段只修改 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`，不修改 production、tests、`SPEC.md`、`PLAN.md` 或其他 WP-owned file。
+- 本记录不授权 stage、commit、push、PR 或 merge。新的 process-only commit必须等待独立 explicit authorization。
