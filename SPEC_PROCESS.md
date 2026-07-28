@@ -1252,3 +1252,76 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - 本阶段只追加 `AGENT_LOG.md` 与 `SPEC_PROCESS.md`，不修改 production、tests、`SPEC.md`、`PLAN.md` 或其他 WP-owned file。
 - 本记录不授权 stage、commit、push、merge、revert、rebase或任何 history mutation。
 - Reconciliation documentation commit必须等待独立 explicit authorization。
+
+## [RETROSPECTIVE] WP-13 ChangeSet and Conflict Detection process record
+
+### [RETROSPECTIVE] Status and gate transition
+
+- [RETROSPECTIVE] WP-13 状态为 `COMPLETED / COMMITTED / MERGED`。start、Red、Green、review blocked、authority-boundary review fix 与 Final Review PASS 可由既有 `AGENT_LOG.md` 条目重建；独立 planning checkpoint 未同期保存【USER_REPORTED】。
+- [RETROSPECTIVE] Git 证明 implementation commit `bfbc08137ee45d23e0506c0aa2d99689f0ae24be` 由 merge commit `7fa31a5bb038bebdfd08f16e547e4714c3c63e08` 合入 main，且当前 main ancestry 仍包含二者【VERIFIED】。
+
+### [RETROSPECTIVE] Important decisions
+
+- [RETROSPECTIVE] ChangeSet 只消费已有可信 `BaselineManifest` 与 `TaskWorkspace` snapshot；WP-13 不签发 persistence/ACTIVE authority【USER_REPORTED】。
+- [RETROSPECTIVE] Git diff/status/history 不作为 ChangeSet 事务真相；unsupported concurrent target change 必须形成确定性 `ConflictReport`，冲突不自动 merge；workspace snapshot 受 files/bytes/depth 资源上限约束【USER_REPORTED】。
+- [RETROSPECTIVE] Requirement scope 为 `TXN-005..008, TXN-017..018`【USER_REPORTED】。
+
+### [RETROSPECTIVE] Verification and limitations
+
+- [RETROSPECTIVE] 既有台账记录最终 WP-13 定向 suite 为 `34 passed`，但本补录不声称保存了当时完整原始终端输出【USER_REPORTED】。
+- [RETROSPECTIVE] WP-15 merge 后当前 main 全量回归为 `757 passed in 29.89s`，并验证 WP-13 commit ancestry【VERIFIED】。
+- [RETROSPECTIVE] `CONTENT_LIMIT_OR_READ_FAILURE` 的原因粒度与永久 directory-swap fault-injection coverage 是当时记录的非阻断限制【USER_REPORTED】。
+
+### [RETROSPECTIVE] Final process gate
+
+- [RETROSPECTIVE] `WP13_PROCESS_CLOSEOUT = RECOVERED`；本节仅恢复高层证据链，不改写同期历史，不授权任何 Git history mutation。
+
+## [RETROSPECTIVE] WP-14 Apply Transaction / Rollback / Recovery process record
+
+### [RETROSPECTIVE] Status and gate transition
+
+- [RETROSPECTIVE] WP-14 状态为 `COMPLETED / COMMITTED / MERGED`。过程经历 start、spec ambiguity stop、人工 runtime-boundary decision、Red/Green、多轮 security review、安全收敛与 Final Review PASS【USER_REPORTED】。
+- [RETROSPECTIVE] Git 证明 implementation commit `15fd5e857f2bff4d2c60bb3434a980002f6bddf8` 由 merge commit `4473f148ed49675b05489b5294b7b690fc99fc76` 合入 main，且当前 main ancestry 仍包含二者【VERIFIED】。
+
+### [RETROSPECTIVE] Important decisions
+
+- [RETROSPECTIVE] Harness 私有 transaction journal、backup 与 crash recovery state detection 属于 WP-14 Transaction Runtime；SQLite、Audit Store、Event Store 与长期历史查询不属于 WP-14【USER_REPORTED】。
+- [RETROSPECTIVE] Apply 必须由 transaction coordinator 执行 prepare、backup、apply、verify、rollback/recovery；禁止 Git commit/reset/checkout rollback、自动 merge及由 LLM 判定事务结果【USER_REPORTED】。
+- [RETROSPECTIVE] 最终安全收敛将 target-root identity、parent identity binding 与 displaced-directory mismatch 纳入 immutable apply plan/journal evidence；startup recovery identity mismatch 必须 fail closed 为 `RECOVERY_REQUIRED`【USER_REPORTED】。
+- [RETROSPECTIVE] Requirement scope 包含 foundational `TXN-001..004` 与 PLAN-owned `TXN-009..016, TXN-019`【USER_REPORTED】。
+
+### [RETROSPECTIVE] Verification and limitations
+
+- [RETROSPECTIVE] 既有台账记录最终 WP-14 suite 为 `66 passed`、WP-13+14 为 `100 passed`，但本补录不声称保存了当时完整原始终端输出【USER_REPORTED】。
+- [RETROSPECTIVE] WP-15 merge 后当前 main 全量回归为 `757 passed in 29.89s`，并验证 WP-14 commit ancestry【VERIFIED】。
+- [RETROSPECTIVE] WP-14 只拥有当前事务 runtime 与恢复证据，不提供 WP-15 长期审计查询或跨介质原子性【USER_REPORTED】。
+
+### [RETROSPECTIVE] Final process gate
+
+- [RETROSPECTIVE] `WP14_PROCESS_CLOSEOUT = RECOVERED`；本节不重新定义 transaction state machine、rollback/apply semantics 或 WP-15 authority。
+
+## [RETROSPECTIVE] WP-15 Persistence / Audit process record
+
+### [RETROSPECTIVE] Status and gate transition
+
+- [RETROSPECTIVE] WP-15 状态为 `COMPLETED / COMMITTED / MERGED / POST_MERGE_VERIFIED`。planning review、Red、Phase A/B/C implementation、quality-review findings、四阶段 review fix 与 Final Quality Review PASS 来自已批准历史会话；planning/final-review 原文未同期保存到仓库【USER_REPORTED】。
+- [RETROSPECTIVE] Git 证明 implementation commit `53751e479f82aed8e08a55d399232cc151ead5f1` 由 two-parent merge commit `0492927b4cc9f8e4298cb9810388673e337e320a` 合入 main；local main 与 origin/main 均指向该 merge commit【VERIFIED】。
+
+### [RETROSPECTIVE] Important decisions
+
+- [RETROSPECTIVE] WP-15 负责长期保存、查询与审计，不重新定义 WP-14 transaction state machine、apply、rollback 或 recovery semantics【USER_REPORTED】。
+- [RETROSPECTIVE] `HarnessStore` 保持 domain-only abstraction，不公开 `execute_sql`、`sqlite3.Connection`、Cursor 或 Row；SQLite adapter 保存 Task/governance versions、approval lifecycle、budget、ChangeSet confirmation、audit与Apply observation【USER_REPORTED】。
+- [RETROSPECTIVE] Store 只观察真实 WP-14 `ApplyResult` 并保存 identity、digests、phase、journal reference与summary；persistence 不成为 transaction、apply或recovery authority【USER_REPORTED】。
+- [RETROSPECTIVE] Migration integrity 包括严格顺序与连续前缀、SHA-256 checksum、drift detection、no downgrade与失败 rollback；audit 通过原子 business-state+audit写入及 UPDATE/DELETE trigger保持 append-only【USER_REPORTED】。
+- [RETROSPECTIVE] Requirement scope 为 `PST-001..003, PST-007..012`【USER_REPORTED】。
+
+### [RETROSPECTIVE] Verification and limitations
+
+- [RETROSPECTIVE] 既有台账记录最终 persistence suite 为 `30 passed`、WP-13+14 regression 为 `100 passed`；Final Quality Review PASS及其详细 finding closure来自批准历史会话【USER_REPORTED】。
+- [RETROSPECTIVE] merge 后 main 全量回归收集 `757`、通过 `757`、失败 `0`，用时 `29.89s`；working tree clean，WP-13/14/15 ancestry均通过【VERIFIED】。
+- [RETROSPECTIVE] SQLite 与 WP-14 磁盘 journal 不保证跨介质原子性；journal reference只做安全相对路径边界验证，启动一致性协调仍属于 WP-18【USER_REPORTED】。
+- [RETROSPECTIVE] WP-15 未实现 WP-16 event delivery、WP-17 lease/lock 或 WP-18 startup recovery orchestration【USER_REPORTED】。
+
+### [RETROSPECTIVE] Final process gate
+
+- [RETROSPECTIVE] `WP15_PROCESS_CLOSEOUT = RECOVERED`；当前 main 的 WP-15 post-merge baseline 已验证【VERIFIED】。本节仅恢复过程证据，不授权 commit、merge、rebase、reset或其他 history mutation。
