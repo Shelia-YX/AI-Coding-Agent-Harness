@@ -1325,3 +1325,134 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 ### [RETROSPECTIVE] Final process gate
 
 - [RETROSPECTIVE] `WP15_PROCESS_CLOSEOUT = RECOVERED`；当前 main 的 WP-15 post-merge baseline 已验证【VERIFIED】。本节仅恢复过程证据，不授权 commit、merge、rebase、reset或其他 history mutation。
+
+## WP-16 Event Delivery planning checkpoint
+
+### Status and gate transition
+
+- Status: `PLANNING COMPLETE / WAITING APPROVAL`.
+- Gate transition: `INIT → PLANNING REVIEW`.
+- 本记录为 planning 阶段同步写入的当前过程记录【CONTEMPORANEOUS / VERIFIED】；尚未进入 Red、implementation、review fix 或 commit gate。
+
+### Baseline and scope
+
+- 独立 branch/worktree 为 `wp-16-event-delivery` / `.worktrees/wp-16-event-delivery`，从 clean main `87a4200fe8b87843f5a1852fe0ce9cea0d186c05` 创建；WP-13、WP-14、WP-15 commit ancestry均通过【CONTEMPORANEOUS / VERIFIED】。
+- planning baseline full pytest为 `757 passed in 30.41s`【CONTEMPORANEOUS / VERIFIED】。
+- WP-16 owned PV严格为 `PST-013`、`PST-014`；`PST-023/024` 在本 WP 仅支持三类 evidence separation与关联引用，正式 PV ownership仍属于 WP-24。
+- 当前允许范围仅为 planning与本 checkpoint；未创建 production API、tests、database schema或migration。
+
+### Architecture and authority boundary
+
+- WP-15 负责保存 Task、治理版本、Approval、Budget、ChangeSet confirmation、append-only audit和WP-14 Apply observation；其 SQLite事实仍是持久化来源。
+- WP-16 负责把已持久化领域事实建模为 `DomainEvent`，以 `EvidenceRef` 区分正式审计、持久化领域事件与有界临时日志/私有artifact引用，并通过 `EventReader.after` 提供按event ID读取、polling和replay能力。
+- WP-16不得成为 transaction、apply、recovery或persistence authority；event、reader cursor、consumer状态、内存通知与连接状态均不得改变Task生命周期或解释文件Apply结果。
+- SSE server、HTTP、subscription、push、message queue、distributed event bus与at-least-once client protocol属于WP-24；WP-17 lock/lease和WP-18 startup recovery orchestration不进入本 WP。
+
+### Proposed event and delivery contract
+
+- `DomainEvent` 最小持久化字段为全局单调 `event_id`、稳定 event kind/source、`occurred_at`、task/entity identity、可选 run/action identity、可选 entity revision以及有界、确定性payload/evidence references。业务 identity、revision、timestamp与事实payload来自产生变化的WP-15业务意图/持久化事务；event ID由SQLite持久化序列在同一事务中分配，不能由内存publisher签发。
+- `EventReader.after(event_id, limit)`只读持久化事件，按event ID严格升序返回有界结果；相同cursor可重放相同已提交事实。当前 WP 采用reader/polling，不实现主动subscription或push。
+- consumer失败不删除、不确认或回滚领域事件；consumer可用最后成功处理的event ID重试。重复读取是允许的，consumer按event ID幂等去重；delivery中断不改变任务状态，恢复时继续持久化读取。
+
+### Planning finding requiring human decision
+
+- 冻结 SPEC `PST-013` 要求领域事件与产生它的状态变化在同一SQLite事务提交。
+- PLAN WP-16 的精确文件仅列 `domain/events.py`、`persistence/evidence.py`、`test_events.py`；未包含现有 `persistence/sqlite_store.py`、`persistence/ports.py`、SQL migration或schema文件。当前WP-15 schema没有领域事件表，单靠三个精确文件无法证明state+event原子提交。
+- 实现前需要人工裁决最小合法production/schema surface。未获裁决前不得创建Red tests或通过旁路store、内存event ID、audit投影冒充`PST-013`。
+
+### Planning gate
+
+- `WP16_PLANNING_RESULT = COMPLETE`.
+- `WP16_IMPLEMENTATION_ENTRY = BLOCKED_PENDING_SCOPE_DECISION`.
+- 下一合法动作仅为planning review与人工裁决；本 checkpoint不授权production、test、schema、migration、commit或merge。
+
+### Architecture decision approval
+
+- `2026-07-28 15:40:51 +0800`：人工批准解决`PST-013` blocker的有限persistence boundary扩展【CONTEMPORANEOUS / APPROVED DECISION】。
+- State change与产生它的`DomainEvent`必须在同一SQLite transaction提交；WP-15仍是persistence authority，`DomainEvent`仅为持久化事实，不是新的Task、transaction、apply或recovery authority。
+- 批准production scope：
+  - `src/coding_harness/domain/events.py`
+  - `src/coding_harness/persistence/evidence.py`
+  - `src/coding_harness/persistence/ports.py`
+  - `src/coding_harness/persistence/sqlite_store.py`
+  - `src/coding_harness/persistence/sql/002_events.sql`
+  - `src/coding_harness/persistence/migrations.py`，仅当现有runner无法支持002 migration时允许修改。
+- 批准test scope为`tests/integration/event/test_events.py`。
+- Event Delivery不得修改Task state、Transaction state、Apply state或Recovery state。WP-17 lock/lease、WP-18 recovery orchestration、SSE、HTTP、WebSocket、Message Queue与Distributed Event Bus继续禁止。
+- Gate transition：`PLANNING REVIEW → APPROVED FOR RED`.
+- `WP16_IMPLEMENTATION_ENTRY = APPROVED_FOR_RED`；本记录本身未创建Red、production、schema或migration，也不授权commit或merge。
+
+### Red phase evidence
+
+- `2026-07-28 15:48:58 +0800`：在批准路径`tests/integration/event/test_events.py`新增12个integration contract nodes【CONTEMPORANEOUS / VERIFIED】。
+- 覆盖模型identity/kind/time/entity/revision与bounded payload、EvidenceRef path/digest/size/lifecycle、三类evidence separation、state+event原子回滚、持久化全局单调event ID、`EventReader.after` ordering/bound/replay、memory-not-truth及`PST-013/014`参数化行为。
+- collect-only结果为`12 tests collected in 0.06s`；最终Red为`12 failed in 3.28s`，全部failure为缺失`coding_harness.domain.events`的明确WP-16 contract failure【CONTEMPORANEOUS / VERIFIED】。
+- 首次Red failure带有已捕获`ModuleNotFoundError`上下文；只调整test loader后重跑，最终证据无collection error、import error或environment error。该纠正不改变测试语义。
+- Failure classification：`EXPECTED_INTERFACE_MISSING`。未修改production、schema、migration、`SPEC.md`或`PLAN.md`，未开始Green。
+- Gate transition：`APPROVED FOR RED → RED COMPLETE`.
+- `WP16_RED_GATE = COMPLETE`；下一阶段必须等待Red review/Green授权，本记录不授权commit或merge。
+
+### Implementation milestone
+
+- `2026-07-28 15:54:08 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`【CONTEMPORANEOUS / VERIFIED】。
+- 实际production scope为`domain/events.py`、`persistence/evidence.py`、`persistence/sqlite_store.py`、`persistence/sql/002_events.sql`。`ports.py`无需扩展；现有migration runner已支持连续002，故`migrations.py`未修改。
+- `DomainEvent`为immutable frozen/slots model，event kind闭合，identity/time/entity/revision与canonical bounded payload均确定性验证。`EvidenceRef`只引用私有artifact元数据，不保存正文；`AuditRecord`、`DomainEvent`、temporary evidence保持不同类型。
+- `domain_events.event_id`由SQLite `AUTOINCREMENT`持久分配；表以UPDATE/DELETE trigger保持append-only。WP-15 `create_task`与`transition_task`在原业务事实+audit transaction中插入对应event，event insertion failure使整个transaction rollback。
+- `EventReader.after(event_id, limit)`只通过SQLite read-only/query-only connection读取持久化事件，按event ID升序返回，limit闭合为1..1000；reader无Task/transaction/apply/recovery mutation接口。
+- 首轮WP-16 target suite=`12 passed in 3.48s`；reader read-only hardening后WP-15+WP-16联合回归=`42 passed in 0.43s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope boundary保持：WP-15仍是persistence authority；event只是持久化事实。未实现SSE、HTTP、WebSocket、queue、distributed bus、WP-17 lock/lease或WP-18 recovery orchestration；`SPEC.md`与`PLAN.md`未修改。
+- `WP16_IMPLEMENTATION_MILESTONE = GREEN / REVIEW_PENDING`；当前不授权commit或merge。
+
+### Review gate start
+
+- `2026-07-28 15:56:48 +0800`：Gate transition=`IMPLEMENTATION → REVIEW`【CONTEMPORANEOUS / VERIFIED】。
+- 独立review检查persistence authority、PST-013三写原子性与partial-failure rollback、event/evidence model、persistent reader及禁止surface；主Agent执行WP-16、WP-15和full regression。
+- `WP16_REVIEW_STATUS = IN_PROGRESS`；finding、severity与resolution必须在review结束后同步记录。当前不授权commit或merge。
+
+### Independent review result
+
+- `2026-07-28 16:00:44 +0800`：独立review verdict=`No — Important fixes required`；Critical=`0`、Important=`3`、Minor=`2`【CONTEMPORANEOUS / VERIFIED】。
+- Important 1：`DomainEvent.evidence_refs`接受任意object且只冻结外层tuple，nested mutable与arbitrary persistence/application object可进入public event model；必须建立closed、deeply immutable、bounded reference contract及adversarial tests。
+- Important 2：`EvidenceRef.relative_path`无UTF-8 byte上限且未拒绝newline/tab等control characters；必须增加确定性长度/control validation及边界tests。
+- Important 3：PST-013 fault test未断言audit rollback，且未覆盖`create_task` event failure与audit-insert failure；必须证明task/state、audit、domain-event三写在create/transition partial failure下共同rollback。
+- Minor 1：PLAN固定`test_publisher_reads_store`名称不可删除，但当前unrelated empty-list断言不构成publisher/store证据；review fix应在不实现WP-24 publisher的前提下用真实persistent-reader/reopen行为增强。
+- Minor 2：缺少已有001 database保存task/audit数据后升级002并继续atomic state/event写入的migration regression。
+- Review确认通过的边界：WP-15仍是persistence authority；state+audit+event实现位于同一`with connection` transaction；event ID持久化排序；reader mode=ro/query-only、ordered/bounded/replay；无SSE/HTTP/WebSocket/queue/bus/WP-17/WP-18 surface。
+- Fresh regression：WP-16=`12 passed in 0.18s`；WP-15=`30 passed in 0.39s`；full=`768 passed, 1 failed in 26.39s`，唯一failure为预期dirty-path cleanliness gate；deselect该自指门禁后=`768 passed, 1 deselected in 26.03s`【CONTEMPORANEOUS / VERIFIED】。
+- Failure classification：`PROCESS_CLEANLINESS_GATE`，不是behavior regression。
+- `WP16_REVIEW_STATUS = CHANGES_REQUIRED`；`WP16_REVIEW_RESOLUTION = PENDING_REVIEW_FIX`。当前不授权commit或merge。
+
+### Review fix gate start
+
+- `2026-07-28 16:04:47 +0800`：人工授权解决全部review findings，Gate transition=`REVIEW → REVIEW_FIX`【CONTEMPORANEOUS / VERIFIED】。
+- 修复必须先建立deep immutable/closed EvidenceRef、UTF-8/control path、三写partial-failure、persistent reopen及001→002 upgrade Red，再做最小production修复。
+- `test_publisher_reads_store`名称按PLAN保留，但不得实现WP-24 publisher；只证明write/close/reopen/read来自持久化source。
+- `WP16_REVIEW_FIX_STATUS = STARTED`；继续禁止commit/merge、SPEC/PLAN修改及WP-17/18/24实现。
+
+### Review fix completion
+
+- `2026-07-28 16:11:36 +0800`：Gate transition=`REVIEW_FIX → REVIEW_FIX_COMPLETE`【CONTEMPORANEOUS / VERIFIED】。
+- Review-fix Red为`4 failed, 15 passed in 0.21s`：失败精确来自任意/非精确evidence member仍可进入`DomainEvent`，以及newline、tab和4097-byte path仍被`EvidenceRef`接受。最小实现后WP-16 suite为`19 passed in 3.28s`。
+- Important findings resolution：`EvidenceRef`成为closed frozen domain type，`DomainEvent`只接受精确`EvidenceRef` tuple，拒绝嵌套可变/任意成员；相对路径实施严格UTF-8、4096-byte上限、control-character及canonical relative-path校验；create-event failure、transition-event failure与audit-insert failure均验证Task fact/state、Audit、DomainEvent在同一SQLite transaction共同rollback。
+- Minor findings resolution：保留PLAN固定`test_publisher_reads_store`名称，以write/close/reopen/read证明persistent source且不新增publisher；001-only database升级002后保留既有Task/Audit，并可继续执行atomic state/audit/event mutation。
+- Regression evidence：WP-15=`30 passed in 4.49s`；full=`775 passed, 1 failed in 25.86s`，唯一失败为预期dirty-worktree cleanliness gate；排除该自指流程门禁的完整行为回归=`775 passed, 1 deselected in 29.28s`【CONTEMPORANEOUS / VERIFIED】。
+- 独立复审结果为Critical=`0`、Important=`0`、Minor=`0`，所有原finding关闭；WP-15保持persistence authority，EventReader只读，未引入SSE/HTTP/WebSocket/queue/bus、WP-17、WP-18或WP-24 publisher。
+- `WP16_REVIEW_FIX_STATUS = COMPLETE`；`WP16_NEXT_GATE = FINAL_REVIEW`。当前仍禁止stage、commit或merge，且未修改`SPEC.md`或`PLAN.md`。
+
+### Final review checkpoint
+
+- `2026-07-28 16:17:53 +0800`：Gate transition=`REVIEW_FIX_COMPLETE → FINAL_REVIEW`【CONTEMPORANEOUS / VERIFIED】。
+- Final review只读验证批准文件范围、WP-15 persistence authority、PST-013 business fact/audit/domain-event原子性、002 migration完整性、event/evidence模型与三层regression。
+- 除本同步checkpoint外，不修改production、tests、`SPEC.md`或`PLAN.md`；不执行stage、commit或merge。
+- `WP16_FINAL_REVIEW_STATUS = IN_PROGRESS`；最终finding、test evidence与verdict将在审查结束后同步记录。
+
+### Final review result
+
+- `2026-07-28 16:21:04 +0800`：最终独立review verdict=`PASS`，Critical=`0`、Important=`0`、Minor=`0`【CONTEMPORANEOUS / VERIFIED】。
+- Scope精确限于批准的WP-16 event production/schema/test文件与两份同步过程文档；未实现WP-17 lock/lease、WP-18 recovery orchestration或WP-24 publisher/SSE/API/queue。
+- WP-15 Store继续作为唯一business-state persistence authority；`DomainEvent`仅保存同事务事实，`EventReader`使用SQLite `mode=ro`与`query_only`并且没有mutation API。
+- PST-013 review确认`create_task`和`transition_task`在同一`with connection` transaction写business fact、audit与domain event；create-event、transition-event与audit-insert failure测试分别证明三者共同rollback或保持不变。
+- Migration review确认`002_events.sql`按连续版本由现有runner发现，checksum采用SHA-256，迁移运行于`BEGIN IMMEDIATE`且失败rollback；001→002测试证明旧Task/Audit保留且升级后event功能可用。
+- Event review确认frozen/slots、closed exact `EvidenceRef`、canonical sorted/unique且64KiB bounded payload、UTF-8 4096-byte relative path、control/traversal/absolute/backslash拒绝、digest与size严格校验。
+- Fresh regression：WP-16=`19 passed in 3.20s`；WP-15=`30 passed in 3.25s`；full collected=`776`，结果=`775 passed, 1 failed in 26.09s`，唯一failure为当前7个批准dirty paths触发的clean-worktree流程门禁；排除该自指节点后完整行为集合=`775 passed, 1 deselected in 25.95s`【CONTEMPORANEOUS / VERIFIED】。
+- `WP16_FINAL_REVIEW_STATUS = PASS`；`WP16_NEXT_GATE = COMMIT_PREPARATION`。本记录不授权stage、commit或merge。
