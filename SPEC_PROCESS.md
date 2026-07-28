@@ -1456,3 +1456,12 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - Event review确认frozen/slots、closed exact `EvidenceRef`、canonical sorted/unique且64KiB bounded payload、UTF-8 4096-byte relative path、control/traversal/absolute/backslash拒绝、digest与size严格校验。
 - Fresh regression：WP-16=`19 passed in 3.20s`；WP-15=`30 passed in 3.25s`；full collected=`776`，结果=`775 passed, 1 failed in 26.09s`，唯一failure为当前7个批准dirty paths触发的clean-worktree流程门禁；排除该自指节点后完整行为集合=`775 passed, 1 deselected in 25.95s`【CONTEMPORANEOUS / VERIFIED】。
 - `WP16_FINAL_REVIEW_STATUS = PASS`；`WP16_NEXT_GATE = COMMIT_PREPARATION`。本记录不授权stage、commit或merge。
+
+### [RETROSPECTIVE] Commit gate completion and final closeout
+
+- [RETROSPECTIVE] 本节于post-merge验证后补录，不表示commit、push、PR merge或main verification发生时已同步写入过程文档。
+- [RETROSPECTIVE] Commit gate完成：implementation commit=`52c3da9522fa8a4461c2df884cbbf009a4ad7f23`，subject=`feat(events): implement persistent domain event delivery foundation`；commit精确包含批准的7个WP-16 production/schema/test/process文件【VERIFIED】。
+- [RETROSPECTIVE] PR merge完成：two-parent merge commit=`208f7bbe66705433a13f3b6fddda3c56d0272e6f`将WP-16 commit合入main；WP-16 commit为main ancestor，WP-13 `bfbc081`、WP-14 `15fd5e8`、WP-15 `53751e4` ancestry继续保持【VERIFIED】。
+- [RETROSPECTIVE] Main regression verification：local main、`origin/main` tracking ref与远程实际main均为`208f7bbe66705433a13f3b6fddda3c56d0272e6f`，working tree clean；使用Python 3.12.3执行`PYTHONDONTWRITEBYTECODE=1 <python> -m pytest -p no:cacheprovider`，结果为`776 collected / 776 passed / 0 failed in 26.78s`，且未产生cache、bytecode、SQLite database或temporary artifact【VERIFIED】。
+- [RETROSPECTIVE] 远程feature branch删除已由远程实际refs只读查询确认；本地同名remote-tracking ref在未prune条件下可能保留，仅属于tracking cache，不改变merge结论【VERIFIED】。
+- [RETROSPECTIVE] Final process gate：`COMMIT_PREPARATION → COMMIT_AUTHORIZED → COMMITTED → PUSHED → MERGED → POST_MERGE_VERIFIED → CLOSED`。`WP16_FINAL_STATUS = CLOSED`；WP-16过程证据链闭合【VERIFIED】。
