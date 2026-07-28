@@ -19,6 +19,10 @@ from coding_harness.domain.enums import (
     TransitionReason,
     TransitionTrigger,
 )
+from coding_harness.domain.events import (
+    DomainEventKind,
+    canonical_event_payload,
+)
 from coding_harness.domain.models import (
     ContractVersion,
     PlanVersion,
@@ -220,6 +224,33 @@ class SQLiteHarnessStore(HarnessStore):
             ),
         )
 
+    @staticmethod
+    def _event(
+        connection: sqlite3.Connection,
+        *,
+        event_kind: DomainEventKind,
+        occurred_at: int,
+        task_id: str,
+        entity_identity: str,
+        entity_revision: int,
+        payload: tuple[tuple[str, str], ...],
+    ) -> None:
+        connection.execute(
+            "INSERT INTO domain_events"
+            "(event_kind, occurred_at, task_id, entity_identity, "
+            "entity_revision, payload, evidence_refs) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?)",
+            (
+                event_kind.value,
+                occurred_at,
+                task_id,
+                entity_identity,
+                entity_revision,
+                canonical_event_payload(payload),
+                "[]",
+            ),
+        )
+
     def create_task(
         self,
         *,
@@ -248,6 +279,15 @@ class SQLiteHarnessStore(HarnessStore):
                     event_kind="TASK_CREATED",
                     subject_identity=task_id,
                     occurred_at=occurred_at,
+                )
+                self._event(
+                    connection,
+                    event_kind=DomainEventKind.TASK_CREATED,
+                    occurred_at=occurred_at,
+                    task_id=task_id,
+                    entity_identity=task_id,
+                    entity_revision=1,
+                    payload=(("initial_state", initial_state.value),),
                 )
         except sqlite3.Error:
             raise PersistenceError("task and audit persistence failed") from None
@@ -328,6 +368,18 @@ class SQLiteHarnessStore(HarnessStore):
                     raise PersistenceConflict(
                         "expected task state or revision conflict"
                     )
+                revision_row = connection.execute(
+                    "SELECT revision FROM tasks WHERE task_id = ?",
+                    (task_id,),
+                ).fetchone()
+                if (
+                    revision_row is None
+                    or type(revision_row[0]) is not int
+                    or revision_row[0] < 2
+                ):
+                    raise PersistenceError(
+                        "persisted task revision is invalid"
+                    )
                 self._audit(
                     connection,
                     task_id=task_id,
@@ -335,6 +387,21 @@ class SQLiteHarnessStore(HarnessStore):
                     subject_identity=task_id,
                     occurred_at=occurred_at,
                     transition=audit,
+                )
+                self._event(
+                    connection,
+                    event_kind=DomainEventKind.TASK_STATE_CHANGED,
+                    occurred_at=occurred_at,
+                    task_id=task_id,
+                    entity_identity=task_id,
+                    entity_revision=revision_row[0],
+                    payload=(
+                        ("permitted", "true"),
+                        ("reason", audit.reason.value),
+                        ("source_state", expected_state.value),
+                        ("target_state", target_state.value),
+                        ("trigger", audit.trigger.value),
+                    ),
                 )
         except PersistenceConflict:
             raise
