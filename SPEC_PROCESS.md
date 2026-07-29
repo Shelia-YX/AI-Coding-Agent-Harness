@@ -1565,3 +1565,12 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - Global slot、kernel lock/crash release、lease/owner/revision CAS、expiration/recovery边界、concurrent acquire、旧owner拒绝、002→003保留与migration rollback均通过源码及测试证据核验。
 - Fresh test evidence：WP-17=`24 passed in 0.34s`；persistence regression=`54 passed in 0.59s`【CONTEMPORANEOUS / VERIFIED】。
 - Gate transition=`WP17_FINAL_REVIEW → WP17_FINAL_REVIEW_PASS`；`WP17_FINAL_REVIEW_STATUS = PASS`，下一阶段=`COMMIT_PREPARATION`。本checkpoint不授权stage、commit、merge或push。
+
+### [RETROSPECTIVE] WP-17 Final Closeout checkpoint
+
+- [RETROSPECTIVE] 本节于PR merge及post-merge main verification完成后补录；不表示commit、push、merge或main regression发生时已同步写入过程文档。
+- [RETROSPECTIVE] Commit gate completion：implementation commit=`f0e4dd0c9e5e938b839bce376531dbe6f27205c6`，subject=`feat(lease): implement process lock and execution lease ownership`，精确包含批准的WP-17 production/schema/test/process文件【VERIFIED】。
+- [RETROSPECTIVE] PR merge：two-parent merge commit=`ac1074fa93b643f7eef0e08bdea1ac350f5a4daf`，message=`Merge pull request #8 from Shelia-YX/wp-17-process-lock-lease`，parents为merge前main `b3eca6c3cd713b54645dbe7dec3873a8ff894290`与WP-17 commit `f0e4dd0c9e5e938b839bce376531dbe6f27205c6`【VERIFIED】。
+- [RETROSPECTIVE] Main verification：local main、`origin/main` tracking ref与远程实际main均为merge commit，ahead/behind=`0/0`，working tree clean；WP-13～WP-17 commits均为main ancestor【VERIFIED】。
+- [RETROSPECTIVE] Regression：执行禁用bytecode/cache的完整pytest，结果=`800 collected / 800 passed / 0 failed in 25.20s`；测试后main仍clean且无cache、bytecode、SQLite database或temporary/editor artifact【VERIFIED】。
+- [RETROSPECTIVE] Final process gate：`WP17_FINAL_REVIEW_PASS → WP17_MERGED_VERIFIED → WP17_CLOSED`。`WP17_FINAL_STATUS = CLOSED`；WP-17过程证据链闭合【VERIFIED】。
