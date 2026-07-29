@@ -1695,3 +1695,11 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - Authority boundary verification=`PASS`：WP-18仅执行startup scan、classification与authority delegation；WP-14仍执行recovery，WP-15仍负责persistence，WP-17仍负责lease mutation/CAS，WP-16 DomainEvent不作为recovery truth。无migration、Task lifecycle、SPEC/PLAN或WP-14/WP-16/WP-17越界修改。
 - Final verification：WP-18=`52 passed in 4.65s`、persistence=`54 passed in 1.02s`、transaction=`100 passed in 11.13s`；full=`851 passed / 1 failed in 28.10s`，唯一failure为批准dirty paths触发的预提交cleanliness gate【CONTEMPORANEOUS / VERIFIED】。
 - Gate transition=`FINAL_REVIEW_FIX_COMPLETE → FINAL_REVIEW_PASS → COMMIT_PREPARATION`。当前未stage、commit、merge或push。
+
+### [RETROSPECTIVE] WP-18 Final Closeout checkpoint
+
+- [RETROSPECTIVE] [VERIFIED] Commit completion：WP-18 implementation commit=`91dcc65893a2b58209a66bdbb6b72d277fb807b7`，message=`feat(recovery): implement startup recovery orchestration`。
+- [RETROSPECTIVE] [VERIFIED] PR merge：merge commit=`e1086b3cf3975b03a06d42039e9f34fd853325e9`，message=`Merge pull request #9 from Shelia-YX/wp-18-startup-recovery`；其第二parent为WP-18 implementation commit。
+- [RETROSPECTIVE] [VERIFIED] Main synchronization：local main、local `origin/main` tracking ref与remote actual main均为merge commit，ahead/behind=`0/0`，working tree clean；remote feature branch已删除。
+- [RETROSPECTIVE] [VERIFIED] Regression evidence：clean main完整pytest=`852 collected / 852 passed / 0 failed in 28.36s`；WP-13至WP-18 commits均为main ancestor，当前main artifact scan clean。
+- [RETROSPECTIVE] [VERIFIED] Final process gate：`WP18_FINAL_REVIEW_PASS → WP18_MERGED_VERIFIED → WP18_CLOSED`。
