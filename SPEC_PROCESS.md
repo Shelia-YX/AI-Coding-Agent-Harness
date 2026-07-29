@@ -1703,3 +1703,69 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - [RETROSPECTIVE] [VERIFIED] Main synchronization：local main、local `origin/main` tracking ref与remote actual main均为merge commit，ahead/behind=`0/0`，working tree clean；remote feature branch已删除。
 - [RETROSPECTIVE] [VERIFIED] Regression evidence：clean main完整pytest=`852 collected / 852 passed / 0 failed in 28.36s`；WP-13至WP-18 commits均为main ancestor，当前main artifact scan clean。
 - [RETROSPECTIVE] [VERIFIED] Final process gate：`WP18_FINAL_REVIEW_PASS → WP18_MERGED_VERIFIED → WP18_CLOSED`。
+
+## WP-19 Initialization checkpoint
+
+- `2026-07-29 15:03:10 +0800`：WP-19 ownership开始；从clean main创建linked worktree=`.worktrees/wp-19-profile-preflight-doctor`与branch=`wp-19-profile-preflight-doctor`【CONTEMPORANEOUS / VERIFIED】。
+- Main baseline与WP-19 HEAD均为`03c255e2d0a290a75bb076cda239651b75c00c68`；初始worktree clean，WP-13至WP-18 implementation commits均为HEAD ancestor【CONTEMPORANEOUS / VERIFIED】。
+- 文档修改前的完整baseline regression=`852 collected / 852 passed / 0 failed in 26.45s`，禁用bytecode与pytest cache【CONTEMPORANEOUS / VERIFIED】。
+- 当前仅完成初始化证据记录；未开始planning分析，未创建或修改production、tests、migration、SPEC或PLAN。
+- Gate transition=`INIT → PLANNING`；当前状态=`INIT COMPLETE / READY FOR PLANNING`，尚未授权planning之外的工作、stage、commit或push。
+
+### WP-19 Planning checkpoint
+
+- `2026-07-29 15:08:13 +0800`：`PLANNING_STARTED`；读取冻结`SBX-002..005`、`SBX-013`、`ACC-008..009`、`TST-003`、Appendix G与PLAN WP-19精确文件/PV，并核对WP-13至WP-18 authority及现有`run_validation`、Acceptance evidence接口【CONTEMPORANEOUS / VERIFIED】。
+- Architecture boundary：WP-19只定义固定、不可变profile registry，按可信repository signals确定性选择profile，以结构化probe facts进行preflight classification，并生成有界、确定性、read-only doctor report。WP-19不执行Docker workload、不安装依赖、不通过stderr推断missing dependency、不修改Task/Lease/Transaction/Recovery、不成为persistence/event authority。
+- Requirement mapping覆盖owned `SBX-002..005`、`SBX-013`、`ACC-008..009`、`TST-003`；supporting boundary包括`GEN-005`、`GEN-008..010`、`SEC-005`、`SEC-013`、`POL-024`与Appendix B blocked reasons。WP-20依赖profile/doctor contract实现Docker adapter/lifecycle；WP-27依赖Node profile；WP-28/29消费最终acceptance evidence。
+- Proposed scope保持PLAN精确文件：production=`src/coding_harness/sandbox/profiles.py`、`src/coding_harness/sandbox/doctor.py`；tests=`tests/unit/sandbox/test_profiles.py`、`tests/docker/test_doctor.py`。无需schema/migration，不修改WP-14至WP-18 authority实现。
+- Blocker 1：SPEC规定profile image必须来自可信allowlist并固定version或digest，但未提供Python 3.12和Node.js 20/npm的具体可信image identity；实现者不能自行选择镜像并建立trust。
+- Blocker 2：PLAN将`TST-003`归属WP-19，但该requirement要求真实Docker CLI adapter对安全配置、timeout、cancel、cleanup的独立集成测试；adapter/lifecycle及`test_executor.py`明确属于WP-20，不在WP-19 scope。WP-19只能建立doctor/probe contract，不能复制或提前实现WP-20。
+- Human decision requested：提供/批准两个MVP固定image identity；并裁决`TST-003`为WP-19 contract/PV占位且真实adapter evidence延至WP-20（推荐），或显式批准新的requirement ownership/scope。Gate=`INIT → PLANNING → PLANNING BLOCKED / WAITING HUMAN DECISION`；`RED_NOT_AUTHORIZED`。
+
+### WP-19 Scope Reduction Architecture Decision Record
+
+- `2026-07-29 15:15:18 +0800`：人工批准scope reduction，将WP-19定义为`Sandbox Profile / Preflight / Doctor Contract Layer`，原planning blockers关闭【CONTEMPORANEOUS / APPROVED DECISION】。
+- WP-19 responsibility：固定Python 3.12与Node.js 20/npm profile的runtime identity、validation operations、repository recognition signals及deterministic profile digest；bounded `RepositorySignals`的deterministic/immutable/fail-closed selection；只根据structured facts产生`READY`、`BLOCKED_MISSING_DEPENDENCY`或`BLOCKED_UNSUPPORTED_ENVIRONMENT`的preflight classification；生成只读`DoctorReport`及`ValidationEvidence` contract。禁止LLM、repository或user覆盖runtime/profile authority，禁止根据stderr推断dependency failure。
+- Deferred to WP-20：可信image resolution/digest verification（`SBX-004`），以及真实Docker CLI、安全配置、timeout、cancellation、cleanup和execution evidence（`TST-003`）。WP-19不得以fake contract证据宣称上述deferred requirements已满足。
+- Authority boundary保持：WP-14拥有Apply/Rollback/Recovery；WP-15拥有Persistence/Audit；WP-16拥有DomainEvent facts；WP-17拥有Execution ownership；WP-18拥有Startup recovery orchestration；WP-19只拥有Profile/Preflight/Doctor contracts；WP-20拥有Docker execution与image resolution。WP-19不得执行Docker lifecycle/pull/build/run/repair/cleanup，不得直接持久化或修改Task/Lease。
+- Approved file scope：production=`src/coding_harness/sandbox/profiles.py`、`src/coding_harness/sandbox/preflight.py`、`src/coding_harness/sandbox/doctor.py`；tests=`tests/unit/sandbox/test_profiles.py`、`tests/unit/sandbox/test_preflight.py`、`tests/unit/sandbox/test_doctor.py`。禁止migration/schema/`sqlite_store.py`/lease/transaction/recovery修改。
+- Requirement ownership调整：WP-19 owned=`SBX-002, SBX-003, SBX-005, SBX-013, ACC-008, ACC-009`；deferred to WP-20=`SBX-004, TST-003`。
+- Gate transition=`PLANNING BLOCKED → PLANNING COMPLETE → APPROVED FOR RED`；`RED_NOT_STARTED`，当前未授权production implementation。
+
+### WP-19 Red checkpoint
+
+- `2026-07-29 15:21:08 +0800`：`RED_STARTED`；仅新增批准的`tests/unit/sandbox/test_profiles.py`、`tests/unit/sandbox/test_preflight.py`、`tests/unit/sandbox/test_doctor.py`【CONTEMPORANEOUS / VERIFIED】。
+- Profile contract tests覆盖精确Python 3.12与Node.js 20/npm registry、immutability、deterministic digest、repository-signal selection、ambiguous/unsupported fail-closed、LLM suggestion不覆盖确定性选择，以及repository image/runtime override拒绝。
+- Preflight contract tests覆盖structured READY/missing dependency/unsupported environment、stderr不得推断dependency missing、malformed/UTF-8 oversized evidence fail-closed及ACC-009 `ValidationEvidence`必需字段、immutability与deterministic digest。
+- Doctor contract tests覆盖runtime availability、workspace mapping、configured capability classification、UTF-8 byte bound、deterministic report digest，并明确report无repair/cleanup能力。Requirement behavior nodes覆盖owned `SBX-002, SBX-003, SBX-005, SBX-013, ACC-008, ACC-009`。
+- Collect-only=`30 tests collected in 0.02s`、exit 0；target Red=`30 failed in 0.06s`，全部为`EXPECTED_INTERFACE_MISSING`，无collection、syntax、test-import或environment failure【CONTEMPORANEOUS / VERIFIED】。
+- 未创建production/schema/migration/Docker adapter，未修改SPEC/PLAN。Gate transition=`APPROVED FOR RED → RED COMPLETE`；下一阶段=`IMPLEMENTATION`，当前仍未授权implementation/commit/push。
+
+### WP-19 Implementation checkpoint
+
+- `2026-07-29 15:29:22 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`；`IMPLEMENTATION_STARTED`【CONTEMPORANEOUS / VERIFIED】。
+- Approved scope内新增`src/coding_harness/sandbox/profiles.py`、`preflight.py`、`doctor.py`。所有公开contract为frozen/slots模型与闭合enum；UTF-8 byte bounds、tuple normalization及canonical JSON/SHA-256提供deep immutability与deterministic digest。
+- `ProfileRegistry`精确包含Python 3.12与Node.js 20/npm；bounded `RepositorySignals`只接收规范化相对文件信号，拒绝runtime/image override。Selection由代码根据Python/Node recognition signals确定；mixed为`AMBIGUOUS`、无匹配为`UNSUPPORTED`，均fail closed；LLM suggestion不改变选择结果。
+- `Preflight`只消费structured `ProbeEvidence`，按runtime identity、explicit missing dependencies与required validation operation产生`READY`、`BLOCKED_MISSING_DEPENDENCY`或`BLOCKED_UNSUPPORTED_ENVIRONMENT`；`validation_stderr`只作为有界事实进入digest，绝不参与dependency分类。`ValidationEvidence`绑定action/profile/exit/bounded summary/time并产生deterministic digest。
+- `Doctor`只把runtime availability、workspace mapping与configured capability facts转换为有界`DoctorReport`；没有repair/cleanup或Docker lifecycle API，不执行任何外部命令。
+- Target首次Green=`30 passed in 0.05s`。Full pytest=`881 passed / 1 failed in 26.01s`，唯一failure为批准的8个预提交dirty paths触发cleanliness gate；排除该自指节点后=`881 passed / 1 deselected in 26.89s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope/diff/artifact检查PASS：无SQLite、Task/Lease/Transaction/Recovery、Docker adapter/execution/lifecycle、schema/migration、SPEC/PLAN修改。Gate=`IMPLEMENTATION COMPLETE / REVIEW PENDING`；本阶段不进入Review且未commit/push。
+
+### WP-19 Review and review-fix checkpoint
+
+- `2026-07-29 15:46:45 +0800`：`REVIEW_STARTED`；review verdict=`CHANGES_REQUIRED`。Important findings为DoctorReport digest未绑定runtime、workspace及capability事实身份，以及ValidationEvidence没有公开、可测试的canonical bytes合同；Minor finding为RepositorySignals/ValidationEvidence资源限界及`SBX-013`显式requirement evidence不足【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`REVIEW → CHANGES_REQUIRED → REVIEW_FIX_STARTED`。修复严格限于批准的WP-19 contract production、unit tests与两份过程文档；不增加Docker/image resolution、SQLite/migration/persistence、lease、transaction或recovery能力。
+- Review-fix Red=`5 failed / 34 passed`：runtime identity、workspace reference、capability identity变化均未改变DoctorReport digest；`ValidationEvidence.canonical_bytes()`两个合同节点因接口缺失失败。失败来自预期behavior/interface缺口，无collection或environment failure【CONTEMPORANEOUS / VERIFIED】。
+- `DoctorFacts`现生成绑定runtime identity/availability、workspace reference/mapping、capability identities/trust及bounded output的immutable事实digest，`DoctorReport`显式绑定该source digest。`ValidationEvidence.canonical_bytes()`使用固定字段、canonical JSON及UTF-8 bytes；evidence digest直接由`sha256(canonical_bytes())`计算。
+- Bounds evidence覆盖RepositorySignals最大signal count与UTF-8 path byte limit、ValidationEvidence oversized output rejection；参数化行为节点显式覆盖owned `SBX-002, SBX-003, SBX-005, SBX-013, ACC-008, ACC-009`。
+- Green=`39 passed in 0.05s`。Full pytest=`890 passed / 1 failed in 29.56s`，唯一failure为8个批准预提交dirty paths触发的process cleanliness gate，不是behavior regression【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`REVIEW_FIX_STARTED → REVIEW_FIX_COMPLETE`；下一阶段=`FINAL_REVIEW`。当前未stage、commit或push。
+
+### WP-19 Final Review checkpoint
+
+- `2026-07-29 15:55:37 +0800`：Final Review verdict=`PASS`，Critical=`0`、Important=`0`、Minor=`0`【CONTEMPORANEOUS / VERIFIED】。
+- Doctor evidence integrity=`PASS`：runtime identity、workspace reference与capability identities完整进入immutable DoctorFacts digest，DoctorReport绑定source facts digest；对抗测试证明任一身份变化均改变report digest。
+- ValidationEvidence canonical serialization=`PASS`：公开`canonical_bytes()`为固定字段、确定性UTF-8 canonical JSON表示，digest直接等于`sha256(canonical_bytes())`。
+- Requirement verification=`SBX-002, SBX-003, SBX-005, SBX-013, ACC-008, ACC-009 PASS`。Scope boundary=`PASS`：无Docker/image authority、SQLite/migration/persistence、lease、transaction或recovery越界。
+- Sandbox evidence=`39 passed in 0.05s`。Full regression=`890 passed / 1 failed in 29.68s`；唯一failure为8个批准WP-19预提交dirty paths触发的process cleanliness gate，不是behavior regression，提交后需在clean worktree重新关闭该门禁【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`FINAL_REVIEW_FIX_COMPLETE → FINAL_REVIEW_PASS → COMMIT_PREPARATION`。当前未stage、commit或push。
