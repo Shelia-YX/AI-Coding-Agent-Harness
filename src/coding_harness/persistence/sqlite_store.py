@@ -32,6 +32,8 @@ from coding_harness.persistence.ports import (
     ApplyObservation,
     AuditRecord,
     HarnessStore,
+    RecoveryFindingRecord,
+    StartupRecoveryCandidate,
 )
 from coding_harness.transaction.conflicts import ApplyConfirmation
 from coding_harness.transaction.models import (
@@ -980,6 +982,160 @@ class SQLiteHarnessStore(HarnessStore):
             raise PersistenceError(
                 "persisted apply observation is invalid"
             ) from None
+
+    def startup_recovery_candidates(
+        self,
+        *,
+        limit: int,
+    ) -> tuple[StartupRecoveryCandidate, ...]:
+        if type(limit) is not int or limit < 1 or limit > 1000:
+            raise ValueError("startup recovery candidate query is invalid")
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT t.task_id, t.state, t.revision, "
+                "(SELECT l.run_id FROM execution_leases AS l "
+                " WHERE l.task_id = t.task_id "
+                " AND l.status IN ('ACTIVE', 'RECOVERY_PENDING') "
+                " ORDER BY l.acquired_at DESC, l.lease_id DESC LIMIT 1), "
+                "a.transaction_id, a.phase, a.journal_reference, "
+                "a.plan_digest, "
+                "(SELECT p.identity FROM plan_versions AS p "
+                " WHERE p.task_id = t.task_id "
+                " ORDER BY p.sequence DESC, p.identity DESC LIMIT 1), "
+                "(SELECT c.identity FROM contract_versions AS c "
+                " WHERE c.task_id = t.task_id "
+                " ORDER BY c.sequence DESC, c.identity DESC LIMIT 1), "
+                "(SELECT ap.approval_identity FROM approvals AS ap "
+                " WHERE ap.task_id = t.task_id "
+                " ORDER BY ap.rowid DESC LIMIT 1), "
+                "(SELECT ap.revision FROM approvals AS ap "
+                " WHERE ap.task_id = t.task_id "
+                " ORDER BY ap.rowid DESC LIMIT 1), "
+                "(SELECT ap.payload FROM approvals AS ap "
+                " WHERE ap.task_id = t.task_id "
+                " ORDER BY ap.rowid DESC LIMIT 1) "
+                "FROM tasks AS t "
+                "LEFT JOIN apply_observations AS a "
+                "ON a.transaction_id = ("
+                " SELECT selected.transaction_id "
+                " FROM apply_observations AS selected "
+                " WHERE selected.task_id = t.task_id "
+                " ORDER BY selected.occurred_at DESC, "
+                " selected.transaction_id DESC LIMIT 1"
+                ") "
+                "WHERE t.state NOT IN "
+                "('COMPLETED', 'NOT_APPLIED', 'FAILED', 'CANCELLED') "
+                "ORDER BY t.task_id LIMIT ?",
+                (limit + 1,),
+            ).fetchall()
+        except sqlite3.Error:
+            raise PersistenceError(
+                "startup recovery candidate query failed"
+            ) from None
+        finally:
+            connection.close()
+        if len(rows) > limit:
+            raise PersistenceError(
+                "startup recovery candidate query exceeds limit"
+            )
+        try:
+            candidates = []
+            for row in rows:
+                approval = (
+                    None
+                    if row[12] is None
+                    else _approval_from_payload(row[12])
+                )
+                if approval is not None and (
+                    approval.identity != row[10]
+                    or approval.revision != row[11]
+                    or approval.task_id != row[0]
+                ):
+                    raise ValueError
+                candidates.append(
+                    StartupRecoveryCandidate(
+                    task_id=row[0],
+                    task_state=TaskState(row[1]),
+                    task_revision=row[2],
+                    run_id=row[3],
+                    transaction_id=row[4],
+                    apply_phase=(
+                        None if row[5] is None else ApplyPhase(row[5])
+                    ),
+                    journal_reference=row[6],
+                    plan_version_identity=row[8],
+                    contract_version_identity=row[9],
+                    approval_identity=row[10],
+                    approval_revision=row[11],
+                    approval_plan_version_identity=(
+                        None
+                        if approval is None
+                        else approval.plan_version.identity
+                    ),
+                    apply_plan_digest=row[7],
+                    approval_type=(
+                        None if approval is None else approval.approval_type
+                    ),
+                    approval_consumed=(
+                        None if approval is None else approval.consumed
+                    ),
+                    approval_revoked=(
+                        None if approval is None else approval.revoked
+                    ),
+                    approval_expires_at=(
+                        None if approval is None else approval.expires_at
+                    ),
+                )
+                )
+            return tuple(candidates)
+        except (TypeError, ValueError, PersistenceError):
+            raise PersistenceError(
+                "persisted startup recovery candidate is invalid"
+            ) from None
+
+    def record_recovery_finding(
+        self,
+        *,
+        finding: RecoveryFindingRecord,
+        occurred_at: int,
+    ) -> None:
+        if (
+            type(finding) is not RecoveryFindingRecord
+            or not _valid_time(occurred_at)
+        ):
+            raise ValueError("recovery finding persistence intent is invalid")
+        connection = self._connect()
+        try:
+            with connection:
+                existing = connection.execute(
+                    "SELECT task_id FROM audit_events "
+                    "WHERE event_kind = 'STARTUP_RECOVERY_FINDING' "
+                    "AND subject_identity = ? "
+                    "ORDER BY audit_order LIMIT 2",
+                    (finding.finding_id,),
+                ).fetchall()
+                if existing:
+                    if len(existing) != 1 or existing[0][0] != finding.task_id:
+                        raise PersistenceConflict(
+                            "recovery finding identity conflict"
+                        )
+                    return
+                self._audit(
+                    connection,
+                    task_id=finding.task_id,
+                    event_kind="STARTUP_RECOVERY_FINDING",
+                    subject_identity=finding.finding_id,
+                    occurred_at=occurred_at,
+                )
+        except PersistenceConflict:
+            raise
+        except sqlite3.Error:
+            raise PersistenceError(
+                "recovery finding persistence failed"
+            ) from None
+        finally:
+            connection.close()
 
     def audit_events(self, *, task_id: str) -> tuple[AuditRecord, ...]:
         if not _valid_text(task_id):

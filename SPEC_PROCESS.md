@@ -1574,3 +1574,124 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - [RETROSPECTIVE] Main verification：local main、`origin/main` tracking ref与远程实际main均为merge commit，ahead/behind=`0/0`，working tree clean；WP-13～WP-17 commits均为main ancestor【VERIFIED】。
 - [RETROSPECTIVE] Regression：执行禁用bytecode/cache的完整pytest，结果=`800 collected / 800 passed / 0 failed in 25.20s`；测试后main仍clean且无cache、bytecode、SQLite database或temporary/editor artifact【VERIFIED】。
 - [RETROSPECTIVE] Final process gate：`WP17_FINAL_REVIEW_PASS → WP17_MERGED_VERIFIED → WP17_CLOSED`。`WP17_FINAL_STATUS = CLOSED`；WP-17过程证据链闭合【VERIFIED】。
+
+## WP-18 Initialization checkpoint
+
+### Status and gate transition
+
+- `2026-07-29 12:41:05 +0800`：WP-18 Startup Recovery Orchestration ownership开始，Gate transition=`INIT → PLANNING`【CONTEMPORANEOUS / VERIFIED】。
+- 创建独立linked worktree=`.worktrees/wp-18-startup-recovery`及branch=`wp-18-startup-recovery`，精确基于clean main commit `dc4dadc003e81dec15020b80ef162250dc75bace`【CONTEMPORANEOUS / VERIFIED】。
+- Historical integrity：WP-13 `bfbc08137ee45d23e0506c0aa2d99689f0ae24be`、WP-14 `15fd5e857f2bff4d2c60bb3434a980002f6bddf8`、WP-15 `53751e479f82aed8e08a55d399232cc151ead5f1`、WP-16 `52c3da9522fa8a4461c2df884cbbf009a4ad7f23`、WP-17 `f0e4dd0c9e5e938b839bce376531dbe6f27205c6`及WP-17 closeout baseline均为当前HEAD ancestor【CONTEMPORANEOUS / VERIFIED】。
+- Baseline regression使用禁用bytecode/cache的完整pytest，结果=`800 collected / 800 passed / 0 failed in 28.72s`；未发现cache、bytecode、SQLite database或temporary/editor artifact【CONTEMPORANEOUS / VERIFIED】。
+- 本checkpoint只建立WP-18工作所有权并验证开发基线；尚未阅读或形成WP-18设计，未进入planning分析或implementation，未修改production、tests、migration、`SPEC.md`或`PLAN.md`。
+- `WP18_INITIALIZATION_STATUS = COMPLETE`；`WP18_CURRENT_GATE = PLANNING`；`WP18_DESIGN_STATUS = NOT_STARTED`；`WP18_IMPLEMENTATION_ENTRY = NOT_AUTHORIZED`。当前未stage、commit、push或merge。
+
+## WP-18 Planning checkpoint
+
+### Architecture and authority
+
+- `2026-07-29 12:45:24 +0800`：`PLANNING_STARTED`；只读检查冻结SPEC/PLAN及WP-14～WP-17 public contracts，Gate保持=`INIT → PLANNING`【CONTEMPORANEOUS / VERIFIED】。
+- Startup事实源必须是WP-15 Task/Apply observation、WP-17全局Execution Lease、WP-14磁盘Apply journal及可信task/container inventory；WP-16 DomainEvent只能用于关联和证据复核，不能反向成为Task、Apply或Lease truth。
+- WP-18只负责`scan → classify → acquire recovery ownership → delegate → record result`。Detection/classification由WP-18确定性代码负责；execution ownership由WP-17负责；文件recovery decision与副作用由WP-14 `RecoveryCoordinator`负责；事实/审计持久化由WP-15负责；可重放event读取由WP-16负责。
+- `RecoveryFinding`应为不可变闭合结果，至少绑定finding kind、task/run/lease/transaction identity、journal reference、evidence status、decision及blocking status；任何缺失、矛盾或无法验证的证据均fail closed，不由LLM推断。
+
+### Requirement mapping and flow
+
+- `PST-018`：输入为当前lease、容器inventory、非终态Apply事实、task目录与validated journal；输出为确定排序的findings及global startup blocking decision；owner=WP-18 orchestration，验证=`test_scan_lease/container/apply/check_journal`。
+- `PST-025`：输入为Task state、闭合blocked reason及恢复证据；输出仅为确定性continue/重新调查/外部修复/lease/next-command decision，不新增状态规则；owner=现有domain state machine，WP-18只分类；验证=`test_uncertain_effect_recovers`及requirement node。
+- `PST-026`：输入为等待审批Task、lease及container/file/cleanup终态证据；输出为safe-to-release或blocking finding，审批提交不启动loop；owner=WP-17 release authority与现有governance，WP-18只检查；验证=`test_approval_cleanup_release`。
+- `PST-027`：输入为持久化Plan/Contract版本历史及Approval revision；输出为history-preserved/stale-approval finding，不创建版本或改approval生命周期；owner=WP-15 persistence与governance；验证=`test_revision_history`、`test_old_approval_invalidated`。
+- `PST-028`：输入为等待修订Task、Workspace存在性、当前版本审批及显式continue事实；输出为workspace-preserved但write-disabled decision；owner=Task lifecycle/Policy，WP-18只阻止startup写执行；验证=`test_unapproved_revision_no_write`。
+- `TST-002`：使用临时真实SQLite、transaction/task directories及journal文件覆盖一致、缺失、损坏和中断场景；容器probe使用有界fake inventory，不提前实现Docker adapter；验证=完整`test_startup.py` integration suite。
+- 正常流程：先持有serve ProcessLock；有界扫描并建立不可变snapshot；按identity确定关联Task/Lease/ApplyObservation/Journal/DomainEvent；分类safe terminal、recovery pending、manual evidence required或inconsistent；仅对证据完整且WP-17 CAS允许的项取得recovery lease；调用WP-14 coordinator；将result交回WP-15业务意图接口；只在所有blocking findings闭合后允许新execution。
+- Failure handling：apply crash由journal phase/effect证据决定并委托WP-14；stale lease只由WP-17标记并取得recovery purpose；missing journal或DB/disk不一致保持blocked且不得新写；duplicate startup由serve ProcessLock加lease CAS拒绝；任何持久化失败均不宣称恢复成功。
+
+### Scope analysis and blocker
+
+- 冻结PLAN当前精确范围仅为`src/coding_harness/application/startup_recovery.py`与`tests/integration/recovery/test_startup.py`。
+- 该范围不足以实现真实authority-preserving startup scan：WP-14 `ApplyJournal`只有按已知transaction ID打开及`has_blocking_transaction()`布尔门禁，没有公开的validated nonterminal journal enumeration；WP-15 `HarnessStore`只能按已知task/transaction identity读取，不能枚举startup recovery candidates，也没有recovery finding/audit业务意图写入。
+- 仅在`startup_recovery.py`中直接查SQLite、把DomainEvent当truth、解析WP-14私有journal布局或复制恢复逻辑均违反已批准authority boundary，因此不采用。
+- 推荐最小人工scope裁决：允许修改`src/coding_harness/transaction/journal.py`，只增加有界、只读、验证后的journal enumeration；允许修改`src/coding_harness/persistence/ports.py`与`src/coding_harness/persistence/sqlite_store.py`，只增加purpose-specific startup snapshot query及recovery finding persistence。不得新增通用SQL接口、schema/migration、Apply/rollback实现、lease ownership规则、Task lifecycle或DomainEvent authority。
+- Alternative A（推荐）：批准上述窄扩展，使WP-18消费真实authority并可端到端验证。Alternative B：只在WP-18定义caller-supplied snapshot/fake ports，可保持文件清单但不能证明backend真实startup scan，故不满足`PST-018`。Alternative C：WP-18直读SQLite/磁盘私有格式，明确越权，拒绝。
+- Container inventory在WP-18仅定义位于`startup_recovery.py`内的窄、只读probe contract并由测试fake驱动；不实现Docker命令、cleanup或WP-18以外adapter。
+- `WP18_PLANNING_STATUS = BLOCKED`；`WP18_BLOCKER = AUTHORITY_DISCOVERY_AND_RECORDING_INTERFACES_OUTSIDE_FROZEN_FILE_SCOPE`；`WP18_NEXT_GATE = WAITING_HUMAN_DECISION`；`WP18_RED_ENTRY = NOT_AUTHORIZED`。本checkpoint未创建production或tests，未修改SPEC/PLAN，未stage、commit、push或merge。
+
+## WP-18 Architecture decision checkpoint
+
+### Human decision and blocker resolution
+
+- `2026-07-29 12:49:56 +0800`：人工批准解决真实startup recovery candidate enumeration blocker的最小scope expansion【CONTEMPORANEOUS / APPROVED DECISION】。
+- 批准修改`src/coding_harness/transaction/journal.py`，仅用于新增有界、validated、read-only journal enumeration；不得改变`RecoveryCoordinator`、journal phase语义或实现新的recovery算法。
+- 批准修改`src/coding_harness/persistence/ports.py`与`src/coding_harness/persistence/sqlite_store.py`，仅用于purpose-specific startup recovery candidate query及recovery finding persistence adapter；WP-15继续拥有persistence authority。
+- 原PLAN范围`src/coding_harness/application/startup_recovery.py`与`tests/integration/recovery/test_startup.py`保持有效；新增批准路径只用于解除已记录的authority discovery/recording接口缺口。
+- 禁止修改WP-17 ExecutionLease authority或lease schema、Task lifecycle、WP-16 DomainEvent authority；禁止新增migration、暴露`sqlite3.Connection`/Cursor、增加通用SQL API、直接执行文件recovery或扩大到其他WP。
+- Blocker resolution：`WP18_BLOCKER = RESOLVED_BY_HUMAN_SCOPE_DECISION`。
+- Gate transition=`PLANNING BLOCKED → APPROVED FOR RED`；`WP18_RED_ENTRY = AUTHORIZED`，但本checkpoint仅记录decision，Red尚未开始。
+- 当前未创建或修改production、tests、schema或migration；未修改SPEC/PLAN，未stage、commit、push或merge。
+
+### Red phase evidence
+
+- `2026-07-29 12:55:32 +0800`：Gate transition=`APPROVED FOR RED → RED COMPLETE`【CONTEMPORANEOUS / VERIFIED】。
+- `RED_STARTED`后仅新增批准路径`tests/integration/recovery/test_startup.py`；未创建或修改production、schema或migration，未修改WP-14 RecoveryCoordinator、WP-17 lease、WP-16 event、Task lifecycle、`SPEC.md`或`PLAN.md`。
+- Red contract覆盖candidate discovery、validated bounded/read-only journal enumeration、DomainEvent非authority；WP-18仅scan/classify/request ownership/delegate且不直接修改文件；stale/recovery lease与普通执行阻断；missing journal、DB/disk mismatch、incomplete evidence fail closed；duplicate startup ProcessLock/ExecutionLease边界。
+- PLAN精确行为节点覆盖`test_scan_lease/container/apply/check_journal`、`test_uncertain_effect_recovers`、`test_clarification_paused`、`test_approval_cleanup_release`、`test_revision_history`、`test_old_approval_invalidated`及`test_unapproved_revision_no_write`；另有真实SQLite candidate query、finding append-only persistence及六个owned Requirement参数节点。
+- Requirement evidence覆盖`PST-018`、`PST-025`、`PST-026`、`PST-027`、`PST-028`与`TST-002`，每个节点断言可观察行为而非类型存在。
+- Collect-only命令收集`27 tests in 0.09s`、退出码`0`；完整target Red为`27 failed in 3.32s`、退出码`1`【CONTEMPORANEOUS / VERIFIED】。
+- Failure classification=`27 × EXPECTED_INTERFACE_MISSING`：`coding_harness.application.startup_recovery`及批准的后续public contracts尚不存在。Failure发生于测试执行阶段并由test loader显式转换为pytest failure；无collection error、environment error或无关import error。
+- `WP18_RED_GATE = COMPLETE`；下一阶段为`IMPLEMENTATION`，必须等待明确授权。本checkpoint不授权production实现、stage、commit、merge或push。
+
+### Implementation milestone
+
+- `2026-07-29 13:09:04 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`；`IMPLEMENTATION_STARTED`【CONTEMPORANEOUS / VERIFIED】。
+- 实际production修改严格为批准的`src/coding_harness/application/startup_recovery.py`、`src/coding_harness/transaction/journal.py`、`src/coding_harness/persistence/ports.py`与`src/coding_harness/persistence/sqlite_store.py`；另修改Red test及两份过程文档。未修改schema/migration、SPEC/PLAN或其他WP文件。
+- `RecoveryFinding`、`StartupRecoveryReport`与container observation均为frozen/slots模型；finding kind、evidence status与decision使用闭合enum，identity/reason有UTF-8 byte bounds，finding ID由规范化字段确定性digest生成。
+- `StartupRecovery.scan`只编排可信authority：WP-15提供candidate/finding audit、WP-14提供validated journal snapshot与注入的recovery delegate、WP-17提供lease current/CAS recovery acquisition；DomainEvent reader不用于发现或决定truth。WP-18不实现rollback/restore、不修改journal、Task lifecycle或lease、不自动释放ownership。
+- Journal enumeration只读使用既有owned/private directory验证、bounded file read、Apply Plan解析与journal phase复检；结果按目录名确定排序，超限、损坏、缺失journal phase均fail closed。
+- WP-15 port新增`StartupRecoveryCandidate`、`RecoveryFindingRecord`及两个purpose-specific业务接口；SQLite adapter只返回domain model并追加幂等`STARTUP_RECOVERY_FINDING` audit marker，不暴露connection/cursor或通用SQL，不新增schema/migration。
+- 首轮target Green为`22 passed / 5 failed`。Systematic root-cause analysis确认：`test_check_journal` fixture跳过既有`BACKUP_READY`；mismatch断言错误要求恰好一条；stale-approval fixture错误保留默认Apply transaction；production enumeration未拒绝被删除journal文件产生的`phase=None`。修正fixture/断言并使缺失phase fail closed后，selected=`5 passed in 0.12s`【CONTEMPORANEOUS / VERIFIED】。
+- Final target Green=`27 passed in 0.19s`；persistence regression=`54 passed in 0.59s`；transaction regression=`100 passed in 8.11s`【CONTEMPORANEOUS / VERIFIED】。
+- Full pytest=`826 passed / 1 failed in 25.95s`；唯一failure=`test_worktree_baseline_is_clean`，由7个批准的WP-18预提交dirty paths触发，分类为process cleanliness gate而非behavior regression。排除该自指节点的完整行为集合=`826 passed / 1 deselected in 25.90s`【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`IMPLEMENTATION → REVIEW PENDING`；`WP18_IMPLEMENTATION_STATUS = COMPLETE`，`WP18_REVIEW_STATUS = PENDING`。当前不授权stage、commit、merge或push。
+
+### Review and review-fix checkpoint
+
+- `2026-07-29 13:34:00 +0800`：独立review开始，Gate transition=`IMPLEMENTATION → REVIEW`【CONTEMPORANEOUS / VERIFIED】。
+- Verdict=`CHANGES REQUIRED`。Critical finding为WP-15 candidate与WP-14 journal只按transaction ID匹配，未校验phase、journal reference及已有plan identity，矛盾证据可能被错误标记为verified。Important findings为task/workspace/approval/cleanup与BlockedReason证据不足、重复transaction journal静默覆盖、container probe未由orchestrator独立限界、真实WP-14 RecoveryCoordinator contract未适配、ACTIVE stale lease未经WP-17 expiration authority推进，以及candidate/finding/post-delegation observation persistence failure缺少注入证据【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`REVIEW → CHANGES_REQUIRED → REVIEW_FIX`；`REVIEW_FIX_STARTED`。修复范围保持已批准文件，不新增migration，不修改Task lifecycle、WP-14 recovery算法、WP-17 lease authority或WP-16 event authority；WP-18仍仅负责scan、deterministic classification与authority delegation。
+- Review-fix Red=`29 failed / 10 passed`：新增契约在旧实现上精确暴露Apply evidence binding、workspace/cleanup/BlockedReason、duplicate journal、container bound、WP-14 adapter、ACTIVE stale lease与persistence failure缺口；无collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Evidence consistency现同时绑定transaction ID、canonical journal reference、Apply phase及存在时的Apply Plan digest；任一矛盾均产生blocking `EVIDENCE_MISMATCH`且禁止delegate。Journal enumeration拒绝非canonical目录及重复transaction identity，orchestrator也禁止重复字典折叠。
+- Approval wait只有在当前Plan Version binding、workspace安全相对引用与inode identity、container/file-effect/cleanup三项证据均verified时才可`RELEASE_ALLOWED`；缺失证据fail closed。`BLOCKED` candidate要求闭合`BlockedReason`并把reason与确定next command带入finding；WP-18不改变Task state。
+- Container probe输出由WP-18再次验证为bounded tuple。`RecoveryCoordinatorAdapter`只绑定trusted target root并按真实WP-14 `recover(transaction_id, target_root)` contract委托，不复制恢复算法。ACTIVE stale lease仅调用WP-17 `mark_expired` authority，再使用返回revision执行`acquire_recovery` CAS；WP-18无直接lease mutation。
+- Persistence failure注入覆盖candidate query、finding append及delegate后Apply observation；失败均中止scan且不返回recovery success。Green evidence：WP-18=`39 passed in 0.30s`、persistence=`54 passed in 4.52s`、transaction=`100 passed in 9.83s`、完整行为集合=`838 passed / 1 deselected in 25.92s`【CONTEMPORANEOUS / VERIFIED】。
+- `git diff --check`与artifact检查PASS；未新增migration，未修改SPEC/PLAN、WP-14 recovery算法、WP-17 lease authority、WP-16 event authority或Task lifecycle。Gate transition=`REVIEW_FIX → REVIEW_FIX_COMPLETE`；下一阶段=`FINAL_REVIEW`，当前不授权commit。
+
+### Final review and final-review-fix checkpoint
+
+- `2026-07-29 14:03:00 +0800`：Gate transition=`REVIEW_FIX_COMPLETE → FINAL_REVIEW`，独立final review开始【CONTEMPORANEOUS / VERIFIED】。
+- Verdict=`CHANGES REQUIRED`。Critical finding为不同owner的ACTIVE recovery lease可被startup直接复用，绕过WP-17 owner/revision CAS；Important findings为approval type/consumed/revoked/expiry未进入有效性判断、真实SQLite adapter不能提供workspace/cleanup evidence却由fake测试宣称release capability，以及workspace中间symlink可逃逸task root【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`FINAL_REVIEW → CHANGES_REQUIRED → FINAL_REVIEW_FIX`；`FINAL_REVIEW_FIX_STARTED`。本轮只允许关闭上述四项，不新增migration，不改变WP-14 recovery或WP-17 lease authority，不修改Task lifecycle、DomainEvent authority、SPEC或PLAN。
+- Final-review-fix selected Red=`6 failed / 1 passed / 39 deselected`；approval lifecycle contract缺失、不同owner ACTIVE recovery lease直接delegate、workspace intermediate-symlink escape均有失败证据。旧recovery lease exact Red=`1 failed`，证明WP-14 delegate在没有新WP-17 ownership时被调用【CONTEMPORANEOUS / VERIFIED】。
+- 所有ACTIVE lease均不在startup继承。WP-18只请求WP-17 `mark_expired`；只有authority确认过期并返回新revision后，才用该revision执行`acquire_recovery`并获得全新lease identity与startup owner binding。未过期、persistence failure或CAS conflict均保持blocking，不delegate。
+- Startup candidate从既有approval payload携带闭合ApprovalType、consumed、revoked与expires_at；无需migration。等待Plan approval仅接受未消费、未撤销、未过期且绑定当前Plan Version的`PLAN_APPROVAL`，其他情况产生blocking evidence mismatch。
+- SQLite production adapter没有已存在的cleanup/workspace持久化事实时明确返回unknown defaults；orchestrator因此禁止`RELEASE_ALLOWED`。Fake candidate仅验证窄port接受上层可信evidence，不再被解释为production persistence capability。
+- Task-root inode在coordinator构造时绑定；workspace验证重新打开并核对root identity，再以descriptor-relative `O_NOFOLLOW|O_DIRECTORY`逐层遍历，拒绝root replacement、intermediate symlink与非owned目录，不执行清理或文件修改。
+- Final Green：WP-18=`46 passed in 0.30s`、persistence=`54 passed in 0.75s`、transaction=`100 passed in 8.66s`；full=`845 passed / 1 failed in 29.24s`，唯一failure为预提交dirty paths触发的cleanliness gate；完整行为集合=`845 passed / 1 deselected in 26.65s`【CONTEMPORANEOUS / VERIFIED】。
+- `git diff --check`、artifact、冻结SPEC/PLAN与scope检查PASS；无migration、Task lifecycle、WP-14 recovery、WP-17 lease或WP-16 event修改。Gate transition=`FINAL_REVIEW_FIX → FINAL_REVIEW_FIX_COMPLETE`；下一阶段为再次独立Final Review，当前不授权commit。
+
+### Final review retry and fix 2 checkpoint
+
+- `2026-07-29 14:32:00 +0800`：Final Review Retry verdict=`CHANGES_REQUIRED`。Remaining Critical为`acquire_recovery`返回对象未验证requested new lease identity、old identity排除、startup owner、RECOVERY purpose、ACTIVE status及new-acquisition revision；remaining Important为Plan Version两侧均缺失时`None == None`可被视为binding【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`FINAL_REVIEW → CHANGES_REQUIRED → FINAL_REVIEW_FIX`；`FINAL_REVIEW_FIX_STARTED`。本轮只增加完整ownership proof validation与non-null Plan Version binding；不修改WP-17 lease authority、WP-14 recovery authority，不新增migration，不修改SPEC/PLAN。
+- Final-review-fix-2 selected Red=`6 failed / 46 deselected`：old lease ID、old owner、wrong purpose、wrong status、wrong revision五类adversarial returned proof均错误到达WP-14 delegate；缺失Plan Version双侧binding错误进入`RELEASE_ALLOWED`【CONTEMPORANEOUS / VERIFIED】。
+- Delegate前验证returned lease ID必须等于本次requested deterministic identity且不同old lease ID，task/run必须匹配pending lease，owner必须为current startup owner，purpose/status必须为`RECOVERY/ACTIVE`，revision必须为WP-17新acquisition revision `1`。任一不一致追加blocking `EVIDENCE_MISMATCH`并清除recovery lease，禁止WP-14调用；WP-18仍不修改lease。
+- Plan approval validation先要求current Plan Version identity与approval-bound Plan Version identity均明确存在，再进行equality；缺失任一identity即blocking mismatch，不允许`None == None`。
+- Selected Green=`6 passed / 46 deselected in 3.03s`；WP-18=`52 passed in 3.16s`、persistence=`54 passed in 0.75s`、transaction=`100 passed in 8.44s`；full=`851 passed / 1 failed in 26.08s`，唯一failure为预提交cleanliness gate，排除后=`851 passed / 1 deselected in 27.70s`【CONTEMPORANEOUS / VERIFIED】。
+- `git diff --check`、artifact、冻结SPEC/PLAN与scope检查PASS；无migration或WP-14/WP-17 authority修改。Gate transition=`FINAL_REVIEW_FIX → FINAL_REVIEW_FIX_COMPLETE`；下一阶段为独立Final Review，当前不授权commit。
+
+### Final review pass and commit-preparation checkpoint
+
+- `2026-07-29 14:20:13 +0800`：Final Review Retry 2完成，verdict=`PASS`，Critical=`0`、Important=`0`、Minor=`0`【CONTEMPORANEOUS / VERIFIED】。
+- Recovery ownership proof finding已关闭：WP-18在WP-14 delegate前验证本次requested新lease identity且排除旧identity，并验证startup owner、`RECOVERY` purpose、`ACTIVE` status及WP-17新acquisition revision；任一不一致保持blocking且不delegate。Strict Plan Version binding finding已关闭：current与approval-bound identity必须分别非空后才允许相等比较，缺失binding不能产生`RELEASE_ALLOWED`。
+- Authority boundary verification=`PASS`：WP-18仅执行startup scan、classification与authority delegation；WP-14仍执行recovery，WP-15仍负责persistence，WP-17仍负责lease mutation/CAS，WP-16 DomainEvent不作为recovery truth。无migration、Task lifecycle、SPEC/PLAN或WP-14/WP-16/WP-17越界修改。
+- Final verification：WP-18=`52 passed in 4.65s`、persistence=`54 passed in 1.02s`、transaction=`100 passed in 11.13s`；full=`851 passed / 1 failed in 28.10s`，唯一failure为批准dirty paths触发的预提交cleanliness gate【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`FINAL_REVIEW_FIX_COMPLETE → FINAL_REVIEW_PASS → COMMIT_PREPARATION`。当前未stage、commit、merge或push。

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -25,6 +26,19 @@ _MAX_PLAN_BYTES = 16 * 1024 * 1024
 _MAX_BLOB_BYTES = 8 * 1024 * 1024
 _MAX_RECORDS = 100_000
 _MAX_TRANSACTION_DIRECTORIES = 10_000
+
+
+class JournalEnumerationError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class JournalSnapshot:
+    transaction_id: str
+    journal_reference: str
+    phase: ApplyPhase | None
+    plan_digest: str
+    blocking: bool
 
 
 def _transaction_name(transaction_id: str) -> str:
@@ -1075,4 +1089,126 @@ def has_blocking_transaction(transaction_root: Path) -> bool:
     return False
 
 
-__all__ = ["ApplyJournal"]
+def enumerate_apply_journals(
+    transaction_root: Path,
+    *,
+    limit: int,
+) -> tuple[JournalSnapshot, ...]:
+    """Return validated journal metadata without changing disk state."""
+
+    if (
+        not isinstance(transaction_root, Path)
+        or type(limit) is not int
+        or limit < 1
+        or limit > _MAX_TRANSACTION_DIRECTORIES
+    ):
+        raise ValueError("journal enumeration is invalid")
+    if not os.path.lexists(transaction_root):
+        return ()
+    try:
+        root = _validate_directory(transaction_root.absolute())
+        root_descriptor = _open_validated_directory(root)
+    except (OSError, ValueError):
+        raise JournalEnumerationError(
+            "transaction journal enumeration failed"
+        ) from None
+    try:
+        try:
+            entries = os.scandir(root_descriptor)
+        except OSError:
+            raise JournalEnumerationError(
+                "transaction journal enumeration failed"
+            ) from None
+        names: list[str] = []
+        inspected = 0
+        try:
+            with entries:
+                for entry in entries:
+                    inspected += 1
+                    if inspected > _MAX_TRANSACTION_DIRECTORIES:
+                        raise JournalEnumerationError(
+                            "transaction journal enumeration is bounded"
+                        )
+                    if not entry.name.startswith("txn-"):
+                        continue
+                    names.append(entry.name)
+                    if len(names) > limit:
+                        raise JournalEnumerationError(
+                            "transaction journal enumeration exceeds limit"
+                        )
+        except OSError:
+            raise JournalEnumerationError(
+                "transaction journal enumeration failed"
+            ) from None
+
+        snapshots: list[JournalSnapshot] = []
+        transaction_ids: set[str] = set()
+        for name in sorted(names):
+            child = root / name
+            try:
+                status = os.stat(
+                    name,
+                    dir_fd=root_descriptor,
+                    follow_symlinks=False,
+                )
+                if stat.S_ISLNK(status.st_mode) or not stat.S_ISDIR(
+                    status.st_mode
+                ):
+                    raise ValueError
+                child_descriptor = os.open(
+                    name,
+                    _DIRECTORY_FLAGS,
+                    dir_fd=root_descriptor,
+                )
+                try:
+                    current = os.fstat(child_descriptor)
+                    if (
+                        current.st_dev != status.st_dev
+                        or current.st_ino != status.st_ino
+                        or current.st_uid != os.geteuid()
+                        or current.st_mode & 0o077
+                    ):
+                        raise ValueError
+                    content, _ = _read_bounded_at(
+                        child_descriptor,
+                        "plan.json",
+                        _MAX_PLAN_BYTES,
+                    )
+                finally:
+                    os.close(child_descriptor)
+                plan = parse_apply_plan(content)
+                if (
+                    name != _transaction_name(plan.transaction_id)
+                    or plan.transaction_id in transaction_ids
+                ):
+                    raise ValueError
+                journal = ApplyJournal(child, plan.transaction_id)
+                phase = journal.latest_phase
+                if phase is None:
+                    raise ValueError
+            except (OSError, ValueError):
+                raise JournalEnumerationError(
+                    "transaction journal enumeration found invalid evidence"
+                ) from None
+            snapshots.append(
+                JournalSnapshot(
+                    transaction_id=plan.transaction_id,
+                    journal_reference=name,
+                    phase=phase,
+                    plan_digest=plan.digest,
+                    blocking=phase
+                    not in {ApplyPhase.APPLIED, ApplyPhase.ROLLED_BACK},
+                )
+            )
+            transaction_ids.add(plan.transaction_id)
+        return tuple(snapshots)
+    finally:
+        os.close(root_descriptor)
+
+
+__all__ = [
+    "ApplyJournal",
+    "JournalEnumerationError",
+    "JournalSnapshot",
+    "enumerate_apply_journals",
+]
