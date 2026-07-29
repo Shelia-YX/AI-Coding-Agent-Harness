@@ -1465,3 +1465,103 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - [RETROSPECTIVE] Main regression verification：local main、`origin/main` tracking ref与远程实际main均为`208f7bbe66705433a13f3b6fddda3c56d0272e6f`，working tree clean；使用Python 3.12.3执行`PYTHONDONTWRITEBYTECODE=1 <python> -m pytest -p no:cacheprovider`，结果为`776 collected / 776 passed / 0 failed in 26.78s`，且未产生cache、bytecode、SQLite database或temporary artifact【VERIFIED】。
 - [RETROSPECTIVE] 远程feature branch删除已由远程实际refs只读查询确认；本地同名remote-tracking ref在未prune条件下可能保留，仅属于tracking cache，不改变merge结论【VERIFIED】。
 - [RETROSPECTIVE] Final process gate：`COMMIT_PREPARATION → COMMIT_AUTHORIZED → COMMITTED → PUSHED → MERGED → POST_MERGE_VERIFIED → CLOSED`。`WP16_FINAL_STATUS = CLOSED`；WP-16过程证据链闭合【VERIFIED】。
+
+## WP-17 initialization checkpoint
+
+### Status and gate transition
+
+- `2026-07-29 10:57:04 +0800`：WP-17“进程锁与 Execution Lease”初始化完成，Gate transition=`INIT → PLANNING`【CONTEMPORANEOUS / VERIFIED】。
+- 独立worktree=`.worktrees/wp-17-process-lock-lease`，branch=`wp-17-process-lock-lease`，baseline commit=`b3eca6c3cd713b54645dbe7dec3873a8ff894290`；创建前main与创建后worktree均为clean baseline【CONTEMPORANEOUS / VERIFIED】。
+- WP-13 `bfbc081`、WP-14 `15fd5e8`、WP-15 `53751e4`、WP-16 `52c3da9`均为baseline ancestor；WP-16 commit、merge、main verification与final closeout记录完整【CONTEMPORANEOUS / VERIFIED】。
+- Baseline regression使用Python 3.12.3执行`PYTHONDONTWRITEBYTECODE=1 <python> -m pytest -p no:cacheprovider`，结果=`776 collected / 776 passed / 0 failed in 26.49s`【CONTEMPORANEOUS / VERIFIED】。
+- WP-17 owned requirements为`PST-015..017, PST-019..020`；当前只授权initialization/planning，未创建production或tests，未修改`SPEC.md`或`PLAN.md`。
+- `WP17_STATUS = PLANNING`；`WP17_IMPLEMENTATION_ENTRY = NOT_AUTHORIZED`。本checkpoint不授权stage、commit、merge或push。
+
+### WP-17 Planning checkpoint
+
+#### Status and gate
+
+- `2026-07-29 11:03:25 +0800`：WP-17 planning分析完成，但implementation-entry存在冻结文件范围冲突；Gate=`PLANNING → PLANNING REVIEW BLOCKED`【CONTEMPORANEOUS / VERIFIED】。
+- `WP17_PLANNING_STATUS = BLOCKED / WAITING HUMAN DECISION`。不得进入Red、production、schema或migration实现。
+
+#### Ownership boundary
+
+- Serve lock authority属于OS kernel lock，由`ProcessLock`持有固定私有数据目录lock file的打开descriptor；lock file内容、PID或SQLite行均不是该锁的权威。
+- Execution Lease authority属于`ExecutionLeaseService`的确定性CAS规则，唯一持久化真相必须是SQLite全局单槽记录；WP-15提供SQLite/migration/audit持久化机制，但不决定谁可执行。
+- WP-14仍独占Apply、Rollback与文件Recovery语义。WP-17只在调用前授予或拒绝execution ownership，不解释`ApplyResult`、不推进phase、不执行恢复。
+- WP-16仍只提供已持久化领域事件与只读delivery foundation。`PST-017`明确要求recovery audit而非新DomainEvent，因此WP-17不扩展WP-16 event schema/kind。
+- WP-18负责启动时扫描非终态lease及其他残留状态并编排恢复。WP-17负责把过期heartbeat确定性标记为recovery-pending、原子追加审计并阻止普通执行，不自动清槽或授权其他task。
+- Process lock contention是serve启动边界失败；lease contention是`EXECUTION_SLOT_BUSY`且Task state不变；lease SQLite失败是persistence failure。外部副作用已开始后的恢复升级仍由WP-14/WP-18决定。
+
+#### Conditional design and verification mapping
+
+- `PST-015`：固定私有数据目录输入→单serve lock acquire/busy结果；由OS lock/`ProcessLock`负责；验证`test_single_serve`与`test_lock_lease_separate`。
+- `PST-016`：task/run/owner/acquired-at/last-progress/phase及expected revision输入→唯一active lease或busy；由SQLite lease CAS负责；验证`test_single_execution_lease`、`test_lease_binding`及参数化PV node。
+- `PST-017`：current lease、trusted now与heartbeat期限输入→同task/run的recovery-pending标记和append-only audit，不产生新owner；验证`test_heartbeat`、`test_stale_audit_only`及stale-owner拒绝。
+- `PST-019`：匹配lease/owner/revision与container、file-effect、cleanup安全终态证据输入→release或fail-closed拒绝；验证`test_safe_release`。
+- `PST-020`：recovery-pending slot与normal/recovery acquisition intent输入→recovery优先、普通Agent/Docker/Apply acquisition blocked；验证`test_recovery_priority`与`test_recovery_blocks_execution`。WP-18及后续Docker/API层负责消费此门禁，不把恢复语义迁入WP-17。
+- 候选`ExecutionLease`为frozen snapshot；acquisition内`lease_id/task_id/run_id/owner_identity/acquired_at/purpose`不可变，`last_progress_at/phase/status/revision`仅通过SQLite CAS产生新snapshot。普通acquire、heartbeat、safe release与显式recovery acquire均使用`BEGIN IMMEDIATE`和expected revision/identity检查。
+- Process crash后OS自动释放process lock，但SQLite lease继续存在；过期只进入恢复审计。旧owner返回时因lease identity/revision不匹配被拒绝。数据库提交后进程退出由持久lease在下次inspect/startup scan中恢复，不依赖内存。
+
+#### Blocker and required decision
+
+- 冻结SPEC `PST-016`要求“SQLite Execution Lease”，`PST-011`要求所有schema migration使用仓库内严格递增显式SQL版本、checksum与`schema_migrations`。
+- 当前`001_initial.sql`和`002_events.sql`没有lease表；冻结PLAN WP-17精确文件只有`process_lock.py`、`lease.py`和`test_lease.py`，不包含第三个SQL migration。
+- 在`lease.py`内执行DDL、使用文件/内存lease、复用audit/domain-event作为当前lease authority都会违反冻结规范或既有authority boundary，不能作为替代。
+- 推荐人工批准WP-17最小增加`src/coding_harness/persistence/sql/003_execution_lease.sql`。现有`MigrationRunner`已支持连续003，预计无需修改`migrations.py`、`ports.py`、`sqlite_store.py`、WP-14或WP-16。
+- 批准前`WP17_IMPLEMENTATION_ENTRY = BLOCKED`；下一合法动作仅为人工scope裁决。当前未创建production、tests、schema或migration，未修改`SPEC.md`或`PLAN.md`。
+
+#### Architecture decision approval
+
+- `2026-07-29 11:10:16 +0800`：人工批准解决WP-17 planning blocker的最小scope expansion【CONTEMPORANEOUS / APPROVED DECISION】。
+- 批准新增`src/coding_harness/persistence/sql/003_execution_lease.sql`。理由：`PST-016`要求Execution Lease持久化于SQLite，`PST-011`要求schema由仓库内显式、递增、带checksum记录的migration管理。
+- 原冻结PLAN文件`process_lock.py`、`lease.py`、`test_lease.py`继续保持；除新增003 migration外不扩大production/test范围。
+- Authority boundary保持：WP-15仍是persistence authority；WP-17不实现persistence framework；不修改WP-14 transaction runtime、WP-16 event schema，不实现WP-18 recovery orchestration。
+- Lease expiration只能持久化recovery-pending事实并追加恢复审计，不能自动执行恢复、清除执行槽或把ownership转移给其他task。
+- Gate transition=`PLANNING COMPLETE → APPROVED FOR RED`；`WP17_PLANNING_BLOCKER = RESOLVED`，`WP17_IMPLEMENTATION_ENTRY = APPROVED_FOR_RED`。
+- 本decision checkpoint未创建Red tests、production或003 migration，不授权跳过TDD直接进入实现，也不授权stage、commit、merge或push。
+
+### Red phase evidence
+
+- `2026-07-29 11:19:14 +0800`：Gate transition=`APPROVED FOR RED → RED COMPLETE`【CONTEMPORANEOUS / VERIFIED】。
+- `RED_STARTED`后仅新增批准路径`tests/integration/persistence/test_lease.py`；未创建或修改production、schema或migration，未修改WP-14、WP-16、`SPEC.md`或`PLAN.md`。
+- Red suite覆盖OS process lock单一acquire与竞争、lock file内容非ownership truth、lock contention不改Task state、process-lock/lease authority分离；Execution Lease唯一active slot、task/run/owner绑定、owner与revision CAS heartbeat/release；expiration只产生同identity的recovery-pending与append-only audit，不自动释放、转移ownership、恢复或修改Task state；普通与recovery intent分离及同task/run recovery绑定；003 migration需求。
+- Requirement evidence由参数化行为节点覆盖`PST-015`、`PST-016`、`PST-017`、`PST-019`、`PST-020`，不是仅检查类型存在。
+- Collect-only命令收集`17 tests`、退出码`0`；完整Red为`17 failed in 0.11s`、退出码`1`【CONTEMPORANEOUS / VERIFIED】。
+- Failure classification：`16 × EXPECTED_INTERFACE_MISSING`，因为`coding_harness.persistence.process_lock`及lease contract尚不存在；`1 × EXPECTED_BEHAVIOR_MISSING`，因为`003_execution_lease.sql`尚不存在。无collection error或environment error。
+- `WP17_RED_GATE = COMPLETE`；下一阶段为`IMPLEMENTATION`，必须等待明确授权。本checkpoint不授权production/schema实现、stage、commit、merge或push。
+
+### Implementation milestone
+
+- `2026-07-29 11:31:15 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`【CONTEMPORANEOUS / VERIFIED】。
+- 实际修改范围严格为批准的`src/coding_harness/persistence/process_lock.py`、`src/coding_harness/persistence/lease.py`、`src/coding_harness/persistence/sql/003_execution_lease.sql`、Red test及两份过程文档；未修改`sqlite_store.py`、`ports.py`、WP-14、WP-16、Task lifecycle、`SPEC.md`或`PLAN.md`。
+- `ProcessLock`以OS `flock`及持有中的打开descriptor作为唯一authority；lock file内容与PID不参与ownership判断，descriptor关闭或进程退出即由kernel释放ownership。
+- `ExecutionLease`为frozen snapshot，包含lease、global slot、task、run、owner、purpose、acquired/progress time、phase、status与revision。SQLite部分唯一索引保证每个slot只有一个`ACTIVE`或`RECOVERY_PENDING`记录；acquire、heartbeat、release与recovery acquisition使用`BEGIN IMMEDIATE`及lease/owner/revision CAS，adapter不暴露connection或通用SQL API。
+- Expiration只把匹配的active lease原子标记为`RECOVERY_PENDING`并追加`EXECUTION_LEASE_STALE` audit，不自动释放、不转移ownership、不修改Task state、不执行recovery。显式recovery acquisition必须匹配pending lease的task/run/revision，并产生明确`RECOVERY` purpose；普通execution在pending/recovery lease存在时fail closed。
+- `003_execution_lease.sql`仅声明lease table、开放slot唯一索引及task/run查询索引；现有`MigrationRunner`负责连续版本发现、SHA-256 checksum、drift/no-downgrade及事务应用，production Python未执行DDL。
+- Green evidence：WP-17 target=`17 passed in 0.26s`；包含WP-15/WP-16/WP-17的persistence regression=`47 passed in 1.12s`【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`IMPLEMENTATION → REVIEW READY`；`WP17_IMPLEMENTATION_STATUS = COMPLETE`，`WP17_REVIEW_STATUS = PENDING`。当前不授权stage、commit、merge或push。
+
+### Independent review and review fix
+
+- 独立review确认原boundary未越界，但结论为`CHANGES REQUIRED`：Critical=`1`、Important=`2`【CONTEMPORANEOUS / VERIFIED】。
+- Critical：`ExecutionLeaseService`接受caller-controlled `slot_identity`，003部分唯一索引只约束相同slot；不同slot可各持有open lease，也可绕过另一slot的recovery-pending，违反`PST-016`全局唯一ownership。
+- Important 1：原测试只有同进程lock竞争和顺序default-slot lease竞争，缺少真实并发、持锁进程异常退出以及recovery takeover后旧owner恢复证据。
+- Important 2：原migration测试只从空数据库一次应用001/002/003，缺少既有002 Task/Audit/DomainEvent保留和003中途失败完整回滚证据。
+- Gate transition=`REVIEW → CHANGES REQUIRED → REVIEW_FIX`；`REVIEW_FIX_STARTED`【CONTEMPORANEOUS / VERIFIED】。
+- 新增7个review-fix integration节点。首次选择run为`3 failed / 4 passed`，其中crash子进程因未继承pytest的`src`导入路径而产生无效environment failure；仅修正test-only `PYTHONPATH`后，合法review-fix Red=`2 failed / 5 passed / 17 deselected in 0.19s`【CONTEMPORANEOUS / VERIFIED】。
+- 两项合法Red精确证明caller可指定alternate slot且SQLite可接受第二个不同slot的open lease。其余5项是review要求的缺失证据characterization：真实线程并发、process `os._exit`、旧owner恢复、002升级保留及003失败回滚在原基础机制下通过；未人为制造failure。
+- 最小production修复删除public `slot_identity`输入并固定系统identity=`execution:global`；003对该字段增加固定值CHECK，开放lease部分唯一索引改为常量表达式`(1)`，因此SQLite层不再依赖caller slot值且全库最多一个`ACTIVE`或`RECOVERY_PENDING` lease。
+- 新增行为证据确认：两个独立执行者同时acquire只有一个成功；持锁进程异常退出后新持有者可获取kernel lock；recovery takeover后旧lease/owner/revision无法heartbeat或release；真实version-002数据库中的Task、Audit与DomainEvent在003升级后完整保留；强制003中途失败不记录version 3、不留下半表且旧数据保留。
+- Review-fix selected Green=`7 passed / 17 deselected in 0.17s`；完整WP-17=`24 passed in 0.34s`；persistence regression=`54 passed in 0.59s`【CONTEMPORANEOUS / VERIFIED】。
+- Boundary保持：WP-15提供SQLite/migration/audit persistence；WP-17只决定execution ownership；WP-14、WP-16、Task lifecycle不变；未实现WP-18 startup orchestration或WP-24 delivery。
+- Gate transition=`REVIEW_FIX → REVIEW_FIX_COMPLETE`；`WP17_REVIEW_FIX_STATUS = COMPLETE`，`WP17_NEXT_GATE = FINAL_REVIEW`。当前不授权stage、commit、merge或push。
+
+### Final review checkpoint
+
+- `2026-07-29 11:53:44 +0800`：Final review started，Gate transition=`WP17_REVIEW_FIX_COMPLETE → WP17_FINAL_REVIEW`【CONTEMPORANEOUS / VERIFIED】。
+- 独立final reviewer对批准的ProcessLock、ExecutionLease、003 migration与integration tests执行只读审查；findings=`none`，Critical=`0`、Important=`0`、Minor=`0`。
+- Final verdict=`PASS`。Boundary verification确认WP-15 persistence、WP-17 execution ownership、WP-14 transaction/recovery、WP-16 event与WP-18 startup orchestration职责保持分离；未修改Task lifecycle，未实现WP-18/WP-24。
+- Global slot、kernel lock/crash release、lease/owner/revision CAS、expiration/recovery边界、concurrent acquire、旧owner拒绝、002→003保留与migration rollback均通过源码及测试证据核验。
+- Fresh test evidence：WP-17=`24 passed in 0.34s`；persistence regression=`54 passed in 0.59s`【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`WP17_FINAL_REVIEW → WP17_FINAL_REVIEW_PASS`；`WP17_FINAL_REVIEW_STATUS = PASS`，下一阶段=`COMMIT_PREPARATION`。本checkpoint不授权stage、commit、merge或push。
