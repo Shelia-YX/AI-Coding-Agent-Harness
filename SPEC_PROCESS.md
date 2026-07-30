@@ -1875,3 +1875,95 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - [RETROSPECTIVE] [VERIFIED] Main synchronization=`PASS`：local main、`origin/main` tracking ref与remote actual main一致，ahead/behind=`0/0`，post-test working tree clean。
 - [RETROSPECTIVE] [VERIFIED] Historical integrity=`WP-13 ~ WP-20 PASS`；clean-main regression=`917 collected / 917 passed / 0 failed in 28.88s`。
 - [RETROSPECTIVE] [VERIFIED] Final process gate=`WP20_FINAL_REVIEW_PASS → WP20_MERGED_VERIFIED → WP20_CLOSED`。
+
+## WP-21 Initialization checkpoint
+
+- `2026-07-30 12:32:48 +0800`：WP-21 Trusted Configuration / Provider Boundary ownership开始；从clean main创建linked worktree=`.worktrees/wp-21-trusted-config-provider`及branch=`wp-21-trusted-config-provider`【CONTEMPORANEOUS / VERIFIED】。
+- Main baseline与WP-21 feature HEAD均为`72ecb75e774eaa9b3b6333a0952761dc93a83b74`；`.worktrees/` ignore rule已验证，新worktree初始clean且staging empty【CONTEMPORANEOUS / VERIFIED】。
+- Historical integrity=`WP-13 ~ WP-20 PASS`；各implementation commit均为WP-21 HEAD ancestor【CONTEMPORANEOUS / VERIFIED】。
+- Baseline regression使用项目既有Python 3.12环境，命令禁用bytecode与pytest cache，结果=`917 collected / 917 passed / 0 failed in 28.83s`【CONTEMPORANEOUS / VERIFIED】。
+- 当前仅完成初始化；未开始planning分析，未创建或修改production、tests、schema、migration、SPEC或PLAN。
+- Gate transition=`INIT → PLANNING`；当前状态=`INIT COMPLETE / READY FOR PLANNING`，尚未授权implementation、stage、commit或push。
+
+### WP-21 Planning checkpoint
+
+- `2026-07-30 12:37:24 +0800`：`PLANNING_STARTED`；读取冻结`GEN-008..010`、`AGT-013..014`、`SEC-014..015`、Appendix E、PLAN WP-21精确文件/PV，并核对WP-13至WP-20现有authority和消费接口【CONTEMPORANEOUS / VERIFIED】。
+- Architecture：WP-21位于既有Agent `LLMAdapter`与未来WP-22 credential runtime之间。它消费已经由宿主信任边界分类的defaults/host/startup配置以及WP-19 profile identity、既有Policy/Budget/sandbox/export identities；产出严格`HarnessConfig`、每Run不可变`RunConfigSnapshot`及固定Provider adapter结果。WP-21不成为Persistence、Lease、Docker execution、Transaction/Recovery、Task lifecycle或Credential authority。
+- 推荐设计：`config.py`使用闭合字段、严格类型/范围和显式`startup > trusted host > defaults`合并；untrusted sources不进入API。Snapshot用canonical bytes/digest绑定provider/profile/image/endpoint、policy、budget hard limits、sandbox template和export rules。`provider.py`保持`complete(context)`兼容，构造时绑定snapshot和窄runtime credential/transport，限制timeout/request/token/response，拒绝redirect与endpoint override，以闭合错误区分`PROVIDER_UNAVAILABLE`和`PROVIDER_CONFIGURATION_ERROR`，且不自动fallback。
+- Requirement mapping：`GEN-008`=strict trusted-source config construction；`GEN-009`=deterministic precedence/untrusted exclusion；`GEN-010`=immutable per-run snapshot；`AGT-013`=fixed provider/endpoint and limits；`AGT-014`=deterministic provider failure classification/no fallback；`SEC-014`=redirect rejection；`SEC-015`=untrusted endpoint override impossible。验证位置保持PLAN精确`test_config.py`与`test_provider.py`及7个参数化PV nodes。
+- Failure strategy：unknown/type/range/missing/conflicting trusted configuration均在任何Provider调用前fail closed；Issue/repository/`.env`/tool/LLM/header/WebUI中的endpoint文本仅作为普通内容，不能进入配置；malformed transport/result、oversized response和redirect返回结构化failure，不能切换Provider。
+- Scope保持PLAN：production仅`src/coding_harness/config.py`与`src/coding_harness/agent/provider.py`；tests仅`tests/unit/test_config.py`与`tests/unit/agent/test_provider.py`。无需schema/migration，禁止修改WP-13至WP-20 authority modules。
+- Blocker 1：SPEC/PLAN未指定真实Provider identity、固定endpoint或vendor wire protocol；实现者不得自行选择OpenAI/Anthropic或发明payload schema。
+- Blocker 2：SPEC/PLAN未指定trusted host/startup source representation、内置默认值以及timeout/request/token/response的具体安全硬上限；这些值影响`GEN-008`与`AGT-013`，不能凭经验冻结。
+- Blocker 3：`GEN-010`要求每个Task Run冻结摘要，但PLAN WP-21精确scope只允许配置/provider文件；现有Task Run/persistence无config snapshot binding。需明确本WP只产出immutable contract、由后续orchestration/persistence接入，或显式批准scope expansion。
+- Human decision requested：推荐批准课程级窄transport injection、不在WP-21实现credential store；由可信host/startup显式提供经批准的单Provider/endpoint并给出具体默认/硬上限；确认WP-21只拥有snapshot contract而不修改Task/persistence。未裁决前不得进入Red。
+- Gate=`INIT COMPLETE → PLANNING → PLANNING BLOCKED / WAITING HUMAN DECISION`；`RED_NOT_AUTHORIZED`。
+
+### WP-21 Scope Reduction Architecture Decision
+
+- `2026-07-30 12:41:13 +0800`：人工批准scope reduction并关闭WP-21全部planning blockers【CONTEMPORANEOUS / APPROVED DECISION】。
+- Provider architecture：WP-21只拥有`ProviderRequest`、`ProviderResult`、闭合`ProviderError` classification及`ProviderTransport` injection contract。HTTP client、vendor SDK、OpenAI/client implementation、credential storage与endpoint discovery均明确不属于WP-21。
+- Trusted config：有效来源固定为`startup trusted config > built-in defaults`。Repository config、Issue fields、LLM suggestion、environment与`.env`不进入配置链，也不能覆盖provider或endpoint。
+- Snapshot boundary：`RunConfigSnapshot`只提供immutable configuration snapshot与deterministic digest；不绑定或修改Task lifecycle、ExecutionLease、Persistence及其schema。
+- Course limits冻结为：request timeout=`30 seconds`；max request bytes=`1 MiB (1,048,576 bytes)`；max response bytes=`2 MiB (2,097,152 bytes)`；max token limit=`4096`。这些值是WP-21 contract validation与ProviderTransport request边界。
+- Requirement ownership调整：`GEN-008..010`由strict two-source config、precedence及immutable snapshot验证；`AGT-013..014`由fixed configured identity、四项限额、transport result/error classification及no-fallback合同验证；`SEC-014..015`由redirect rejection与untrusted endpoint override impossibility验证。真实HTTP/vendor execution和credentials不在本WP完成声明中。
+- Approved scope保持：production仅`src/coding_harness/config.py`、`src/coding_harness/agent/provider.py`；tests仅`tests/unit/test_config.py`、`tests/unit/agent/test_provider.py`。禁止Persistence、Lease、Docker、Recovery、Credential module及schema/migration修改。
+- Blocker resolution：provider wire/SDK问题由transport injection消除；配置来源与课程硬限额已冻结；GEN-010明确为snapshot-only contract，无Task/Persistence scope expansion。无剩余human decision。
+- Gate transition=`PLANNING BLOCKED → PLANNING COMPLETE → APPROVED FOR RED`；当前=`RED_NOT_STARTED`，本checkpoint仅同步人工decision，未创建production/tests。
+
+### WP-21 Red checkpoint
+
+- `2026-07-30 12:45:18 +0800`：Gate从`APPROVED FOR RED`进入Red；`RED_STARTED`，仅创建批准的`tests/unit/test_config.py`与`tests/unit/agent/test_provider.py`，未创建或修改production【CONTEMPORANEOUS / VERIFIED】。
+- Config coverage共16 nodes：`HarnessConfig` contract、`startup trusted config > defaults`、repository/environment source exclusion、unknown/type/range拒绝、immutable `RunConfigSnapshot`、canonical determinism、digest binding，以及`GEN-008..010`三个参数化Requirement行为节点。
+- Provider coverage共13 nodes：`ProviderRequest`、`ProviderResult`、`ProviderError` classification、runtime-checkable `ProviderTransport`、timeout→unavailable、unavailable/configuration separation、redirect rejection、single-transport/no fallback、request/response byte limits，以及`AGT-013..014`,`SEC-014..015`四个参数化Requirement行为节点。
+- 测试只用记录型fake transport替代外部网络；被测配置、adapter与分类逻辑仍为未来production接口。测试不访问网络、不需要API Key、不实现HTTP/vendor/credential行为。
+- Collect-only命令=`PYTHONDONTWRITEBYTECODE=1 <project-python-3.12> -m pytest -p no:cacheprovider --collect-only tests/unit/test_config.py tests/unit/agent/test_provider.py -q`，结果=`29 tests collected in 0.02s`、exit 0。
+- Red命令=`PYTHONDONTWRITEBYTECODE=1 <project-python-3.12> -m pytest -p no:cacheprovider tests/unit/test_config.py tests/unit/agent/test_provider.py -q`，结果=`29 failed in 0.04s`、exit 1【CONTEMPORANEOUS / VERIFIED】。
+- Failure classification=`29 EXPECTED_INTERFACE_MISSING`：16个config nodes精确因`coding_harness.config`不存在失败；13个provider nodes精确因`coding_harness.agent.provider`不存在失败。无collection、syntax、test-import、network或environment failure。
+- Scope check：SPEC/PLAN、production、schema/migration、Persistence、Lease、Docker、Recovery与Credential均未修改；未进入implementation。
+- Gate transition=`PLANNING COMPLETE → RED → RED COMPLETE`；下一阶段=`IMPLEMENTATION`，当前=`IMPLEMENTATION_NOT_STARTED / COMMIT_NOT_AUTHORIZED`。
+
+### WP-21 Implementation checkpoint
+
+- `2026-07-30 12:50:32 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`；`IMPLEMENTATION_STARTED`，仅创建批准的`src/coding_harness/config.py`与`src/coding_harness/agent/provider.py`【CONTEMPORANEOUS / VERIFIED】。
+- Config design：frozen/slots `HarnessConfig`只从strict defaults与startup mappings构造，要求defaults精确闭合、startup为闭合集合子集，优先级固定`startup > defaults`。Module不读取environment、`.env`、repository、Issue或LLM。
+- `RunConfigSnapshot`保持snapshot-only boundary：canonical JSON bytes与SHA-256 digest绑定provider/endpoint、profile/image、policy、budget hard limits、sandbox template、export rules及全部课程级limits；不引用或修改Task、ExecutionLease、Persistence。
+- Frozen course limits在config construction、snapshot与ProviderRequest三层一致验证：timeout=`30s`、request=`1,048,576 bytes`、response=`2,097,152 bytes`、tokens=`4096`。
+- Provider design：frozen `ProviderRequest`/`ProviderResult`；runtime-checkable `ProviderTransport.send`；闭合`ProviderResultStatus`/`ProviderErrorCode`；`ProviderAdapter`只调用注入的单一transport一次。Timeout/OSError确定性分类为`PROVIDER_UNAVAILABLE`，configuration result分类为`PROVIDER_CONFIGURATION_ERROR`，redirect为`REDIRECT_REJECTED`且不跟随，非合同result fail closed；无fallback。
+- Boundary：无HTTP client、vendor/OpenAI SDK、endpoint discovery、credential/API Key、network、subprocess、SQLite/Persistence、Lease、Docker、Recovery或schema/migration依赖。
+- Target命令=`PYTHONDONTWRITEBYTECODE=1 <project-python-3.12> -m pytest -p no:cacheprovider tests/unit/test_config.py tests/unit/agent/test_provider.py -q`，首次Green=`29 passed in 0.04s`【CONTEMPORANEOUS / VERIFIED】。
+- Full regression=`945 passed / 1 failed in 29.26s`；唯一failure为六个批准WP-21预提交paths触发`test_worktree_baseline_is_clean`，属于流程cleanliness gate。排除该自指节点后行为集合=`945 passed / 1 deselected in 29.24s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope check：SPEC/PLAN、schema/migration、Persistence、Lease、Docker、Recovery与Credential均未修改；未commit/push。
+- Gate=`IMPLEMENTATION COMPLETE / REVIEW PENDING`。
+
+### WP-21 Review and review-fix checkpoint
+
+- `2026-07-30 13:06:03 +0800`：`REVIEW_STARTED`；review verdict=`CHANGES_REQUIRED`。Findings覆盖closed error taxonomy、built-in defaults authority、窄Provider boundary、transport exception封装及redirect/malformed/boundary/digest/endpoint contract evidence。
+- Gate transition=`IMPLEMENTATION → REVIEW → CHANGES_REQUIRED → REVIEW_FIX_STARTED`。整改严格限于批准的`config.py`、`agent/provider.py`、两份WP-21 unit tests及过程文档；不进入Persistence、Lease、Docker、Recovery、Credential、schema/migration或冻结SPEC/PLAN。
+- Review-fix先补充7个adversarial/edge nodes，总数增至36。旧实现Red=`36 failed in 0.11s`：`HarnessConfig.from_startup`与`ProviderGateway`尚不存在；最终authority复核再增加direct-constructor bypass节点并观察旧实现`1 failed in 0.02s`。两轮均无collection、syntax或environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Config authority修复为module-owned immutable built-in defaults，public construction仅接受trusted startup mapping；caller无法传入defaults，environment/repository/Issue/LLM仍不在API。
+- Provider boundary修复为窄`ProviderGateway.execute`与transport injection，不声称实现既有`LLMAdapter.complete(context)`。`ProviderErrorCode`精确闭合为`PROVIDER_UNAVAILABLE`、`PROVIDER_CONFIGURATION_ERROR`；redirect、malformed/tampered result及unexpected exception映射configuration error，timeout/OSError映射unavailable，raw transport exception不逃逸。
+- Snapshot与ProviderResult digest直接按各自`canonical_bytes()`的SHA-256复验；请求/响应精确limit边界可接受，越界拒绝；SEC-015行为节点验证payload/keyword均不能覆盖trusted endpoint。
+- Final Green=`37 passed in 0.07s`。Full regression=`953 passed / 1 failed in 29.60s`；唯一failure为六个批准预提交paths触发`test_worktree_baseline_is_clean`，分类为流程cleanliness gate而非行为回归【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`REVIEW_FIX_STARTED → REVIEW_FIX_COMPLETE`；下一阶段=`FINAL_REVIEW`，当前=`COMMIT_NOT_AUTHORIZED`。
+
+### WP-21 Final Review Fix Phase 2 checkpoint
+
+- `2026-07-30 13:20:50 +0800`：Final Review verdict=`CHANGES_REQUIRED`。Critical findings：`AGT-013`的`llm_requests`累计预算未由Provider执行边界消费；`RunConfigSnapshot`可被直接构造且gateway创建后仍可用`object.__setattr__`篡改endpoint。Important finding：`GEN-009`四类非可信输入与`AGT-013`累计行为PV证据不完整。
+- Gate transition=`FINAL_REVIEW → CHANGES_REQUIRED → REVIEW_FIX_STARTED`。修复严格限于WP-21批准的两个production、两个tests及过程文档；不修改Task/Run state、Persistence、Lease、Docker、Recovery、Credential、schema/migration或SPEC/PLAN。
+- TDD Red新增4个阻断nodes：direct snapshot construction、snapshot public authority mutation、第5次request budget越界、gateway后endpoint篡改。旧实现=`4 failed in 0.05s`，失败均为预期behavior missing，无collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Snapshot最小修复：仅`HarnessConfig.snapshot()`持有内部factory token；外部direct construction拒绝；public provider/endpoint等authority由无setter property暴露，`object.__setattr__`不能覆盖实际public authority；canonical bytes与SHA-256 digest保持确定性绑定。
+- Provider最小修复：gateway构造时复制已验证的provider/endpoint/timeout authority；从snapshot `budget_hard_limits`读取`llm_requests`，以进程内Lock原子消费累计请求额度。额度内请求成功，下一请求在transport前以闭合既有`PROVIDER_CONFIGURATION_ERROR` fail closed；无Task/Run/Persistence side effect或新error code。
+- Requirement evidence补齐：`GEN-009`显式拒绝dotenv、Issue、tool output、LLM suggestion；`AGT-013`参数化节点验证4次成功、第5次拒绝且transport仅调用4次。
+- Selected Green=`4 passed in 0.03s`；完整WP-21=`41 passed in 0.08s`。Full regression=`957 passed / 1 failed in 29.61s`，唯一failure为六个批准预提交paths触发`test_worktree_baseline_is_clean`，分类为流程cleanliness gate【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`REVIEW_FIX_STARTED → REVIEW_FIX_COMPLETE`；当前=`FINAL_REVIEW_PENDING / COMMIT_NOT_AUTHORIZED`。
+
+### WP-21 Revised Final Review and documentation sync checkpoint
+
+- `2026-07-30 13:31:48 +0800`：人工确认课程级threat model不要求防御同进程Python reflection/private API/object-model bypass【CONTEMPORANEOUS / APPROVED DECISION】。
+- Revised Final Review verdict=`PASS`；Critical=`0`、Important=`0`、Minor=`1`。通过private `_SNAPSHOT_FACTORY_TOKEN`/`RunConfigSnapshot._from_config`构造对象，以及用`object.__setattr__`直接改写private slots的两项finding均重新分类为`OUT_OF_SCOPE`，不阻断本课程实现。
+- 唯一Minor为`AGT-013`缺少真实并发behavior test。Production以同一`Lock`覆盖request-budget check-and-decrement，静态控制流与串行行为均证明超限在transport前fail closed；该测试缺口为non-blocking。
+- Threat model boundary：WP-21保证正常公开API、可信factory contract、canonical digest、固定Provider/endpoint与累计request budget；不保证抵抗已经拥有同进程任意Python执行能力的代码通过reflection、private attribute或object-model bypass修改内部对象。
+- Requirement verification=`PASS` for approved course scope：`GEN-008`,`GEN-009`,`GEN-010`,`AGT-013`,`AGT-014`,`SEC-014`,`SEC-015`。
+- Test evidence：WP-21=`41 passed in 0.08s`；full regression=`957 passed / 1 failed in 30.92s`。唯一failure为六个批准预提交paths触发`test_worktree_baseline_is_clean`，分类为流程cleanliness gate，不是行为回归【CONTEMPORANEOUS / VERIFIED】。
+- Gate transition=`FINAL_REVIEW_PASS → DOCUMENTATION_SYNC_COMPLETE`；下一阶段=`COMMIT_PREPARATION`。本checkpoint仅同步文档，未修改production/tests/SPEC/PLAN，未stage/commit/push。
