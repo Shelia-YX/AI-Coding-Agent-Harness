@@ -1712,6 +1712,20 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - 当前仅完成初始化证据记录；未开始planning分析，未创建或修改production、tests、migration、SPEC或PLAN。
 - Gate transition=`INIT → PLANNING`；当前状态=`INIT COMPLETE / READY FOR PLANNING`，尚未授权planning之外的工作、stage、commit或push。
 
+### WP-20 Planning checkpoint
+
+- `2026-07-30 11:00:36 +0800`：`PLANNING_STARTED`；读取WP-20 frozen Requirement/PV、错误表与精确文件/测试接口，并核对WP-13至WP-19现有authority和消费接口【CONTEMPORANEOUS / VERIFIED】。
+- Authority boundary：WP-20仅拥有Docker CLI adapter、container lifecycle、runtime evidence及timeout/cancel/cleanup行为。WP-13/14/15/16/17/18/19分别继续拥有ChangeSet、Apply/Recovery runtime、Persistence/Audit、DomainEvent、ExecutionLease、Startup Recovery orchestration及Profile/Preflight/Doctor；WP-20不得修改这些authority、Task lifecycle或SQLite。
+- Requirement mapping覆盖PLAN-owned `SEC-002..006, SEC-009, ACT-007, SBX-001, SBX-006..012`；WP-19 scope ADR延期的image trust `SBX-004`与真实Docker evidence `TST-003`由WP-20实现/验证。Supporting boundary包括`SEC-013`的输出过滤以及Appendix E中Docker/timeout/cleanup结果，但状态转换与持久化由其既有owner处理。
+- Recommended design：`DockerCLI.run`仅接受内部闭合operation并使用startup-resolved absolute executable、positive environment allowlist、固定local Unix endpoint、structured argv与`shell=False`；`ContainerLifecycle.execute`消费trusted profile/workspace/run binding，执行image inspect/allowlist、`create --pull=never`、pre-start inspect安全复核、start/attach、post-run inspect及确定性cleanup。用户/仓库/LLM不能提供Docker argv、endpoint、image或安全模板。
+- Lifecycle evidence使用frozen/slots closed enums与canonical digest，绑定container/image/command/task-run identity、phase/exit、timeout/cancel、bounded output、timestamps和cleanup verification。`CLEANUP_FAILED`只作为blocking runtime result/evidence返回；WP-20不直接转Task、修改Lease或执行WP-18 recovery。
+- Unit strategy使用fake process/clock/cancel source覆盖argv/env、bounded parsing、all failure points及cleanup ordering；单独真实Docker marker覆盖安全inspect、timeout、cancel、crash、cleanup和residual detection，满足`TST-003`，且没有host fallback。
+- Blocker 1：两个MVP profile均无人工批准的精确`name@sha256`可信image identity；floating tag与自行选择public image均不允许。
+- Blocker 2：冻结SPEC要求CPU、memory、PID、timeout、output与stop-grace硬限制，但未给数值；实现者不得自行建立安全策略。
+- Blocker 3：当前`/snap/bin/docker`执行`docker version`失败（DBus transient-scope error），可信local Unix endpoint未确认，因此当前环境不能提供真实Docker Green evidence。
+- Proposed scope严格为production=`src/coding_harness/sandbox/docker_cli.py`、`src/coding_harness/sandbox/lifecycle.py`；tests=`tests/docker/test_executor.py`。无需schema/migration，不修改WP-13至WP-19文件。
+- Gate=`INIT → PLANNING → PLANNING BLOCKED / WAITING HUMAN DECISION`；`RED_NOT_AUTHORIZED`，当前未创建production/tests或进入implementation。
+
 ### WP-19 Planning checkpoint
 
 - `2026-07-29 15:08:13 +0800`：`PLANNING_STARTED`；读取冻结`SBX-002..005`、`SBX-013`、`ACC-008..009`、`TST-003`、Appendix G与PLAN WP-19精确文件/PV，并核对WP-13至WP-18 authority及现有`run_validation`、Acceptance evidence接口【CONTEMPORANEOUS / VERIFIED】。
@@ -1777,3 +1791,79 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - [RETROSPECTIVE] [VERIFIED] Main synchronization：local main、local `origin/main` tracking ref与remote actual main均为merge commit，ahead/behind=`0/0`，working tree clean；remote feature branch已删除。
 - [RETROSPECTIVE] [VERIFIED] Main regression evidence：clean main完整pytest=`891 collected / 891 passed / 0 failed in 28.87s`；WP-13至WP-19 commits均为main ancestor，main-scope artifact scan clean。
 - [RETROSPECTIVE] [VERIFIED] Final process gate：`WP19_FINAL_REVIEW_PASS → WP19_MERGED_VERIFIED → WP19_CLOSED`。
+
+## WP-20 Initialization checkpoint
+
+- `2026-07-30 10:53:51 +0800`：WP-20 ownership开始；从最新clean main创建linked worktree=`.worktrees/wp-20-docker-execution-lifecycle`与branch=`wp-20-docker-execution-lifecycle`【CONTEMPORANEOUS / VERIFIED】。
+- Main与WP-20 HEAD均为baseline commit=`b43b26bc6d08f817c534d8e21f820aa600b0b4f5`；新worktree初始clean、staging empty，WP-13至WP-19 implementation commits均为HEAD ancestor【CONTEMPORANEOUS / VERIFIED】。
+- 文档修改前的完整baseline regression=`891 collected / 891 passed / 0 failed in 26.63s`，使用Python 3.12并禁用bytecode与pytest cache【CONTEMPORANEOUS / VERIFIED】。
+- 当前仅完成初始化；未开始planning分析，未创建或修改production、tests、schema、migration、SPEC或PLAN。
+- Gate transition=`INIT → PLANNING`；当前状态=`INIT COMPLETE / READY FOR PLANNING`，尚未授权planning之外的工作、stage、commit或push。
+
+### WP-20 Scope Reduction Architecture Decision
+
+- `2026-07-30 11:06:49 +0800`：人工批准课程项目级scope reduction，关闭先前关于digest image identity、工业级安全策略数值与当前Docker环境的planning blocker【CONTEMPORANEOUS / APPROVED DECISION】。
+- Architecture understanding：WP-19选择固定profile并提供Preflight/Doctor contract；WP-20把批准profile映射到固定tag `python:3.12`或`node:20`，通过窄Docker CLI adapter执行create、start、wait与cleanup，处理timeout并返回有界execution result evidence。WP-20不持久化事实、不取得lease、不修改Task/transaction/recovery状态，也不替代WP-14至WP-19任何authority。
+- Requirement mapping：
+  - `SBX-006`：输入为内部闭合Docker operation；输出为结构化CLI结果；owner=WP-20 adapter；以无shell、无用户Docker argv的unit test验证。
+  - `SBX-010`：输入为固定profile/tag、workspace与validation operation；输出为create/start/wait/cleanup生命周期结果；owner=WP-20 lifecycle wrapper；以调用顺序、失败短路与cleanup integration test验证。原security-inspect部分不在本次课程scope。
+  - `SBX-011`：WP-20只拥有timeout与cleanup结果；cancel/security hardening部分延期；以timeout后cleanup及残留结果测试验证当前子集。
+  - `SBX-012`：Docker不可用或生命周期失败必须结构化失败且不得host fallback；以unavailable/failure tests验证。
+  - `SBX-004`：人工批准课程实现固定tag policy=`python:3.12`,`node:20`；digest verification与供应链安全延期。生产环境应使用digest pinning，本WP不得宣称完成该安全保证。
+  - `TST-003`：WP-20提供真实Docker adapter/lifecycle的课程级integration evidence；digest trust、capability/namespace/security-hardening证据延期。
+  - `ACC-009`：WP-20仅产出可供既有Acceptance owner消费的execution evidence，不决定acceptance结论。
+  - 冻结PLAN中`SEC-002..006, SEC-009, SBX-007..009`及`SBX-010/011/TST-003`的工业安全部分被明确延期、未验证；`ACT-007`继续由既有Policy authority负责，不迁移至Docker runtime。
+- Implementation scope：production仅允许`src/coding_harness/sandbox/docker_cli.py`与`src/coding_harness/sandbox/lifecycle.py`；tests仅允许`tests/docker/test_executor.py`。不新增schema/migration，不修改SQLite、lease、event、transaction、recovery、profile/preflight/doctor或Task lifecycle。
+- Test strategy：使用fake subprocess/clock对structured argv、固定tag allowlist、create/start/wait/cleanup ordering、non-zero exit、timeout、cleanup failure、bounded output与deterministic evidence做离线测试；在Docker可用环境对Python与Node固定tag执行真实success/failure/timeout/cleanup integration。Docker不可用必须明确分类为environment/unavailable且无host fallback。当前Snap Docker错误是后续真实integration Green的环境依赖，不阻塞Red contract。
+- Risks：floating tags可变且不提供供应链完整性；本scope不提供工业级container isolation；Docker daemon本身是高权限外部依赖；timeout后的cleanup可能失败并留下residual container；output bounds与evidence只能证明wrapper观察结果，不能构成安全沙箱证明。以上限制必须在完成报告中保留。
+- Human decision：人工接受上述课程级保证与延期项，无剩余architecture blocker；Red仅应针对已批准的adapter/lifecycle contract建立失败证据，不得用测试重新引入延期的工业安全scope。
+- Gate transition=`PLANNING BLOCKED → PLANNING COMPLETE → APPROVED FOR RED`；当前=`RED_NOT_STARTED`，尚未创建production/test或进入implementation。
+
+### WP-20 Red checkpoint
+
+- `2026-07-30 11:17:00 +0800`：Gate从`APPROVED FOR RED`进入Red；`RED_STARTED`，仅创建批准的`tests/docker/test_executor.py`，未创建或修改production【CONTEMPORANEOUS / VERIFIED】。
+- 12个behavior nodes覆盖：(1) structured argv；(2) `shell=False`；(3) 仅固定`python:3.12`/`node:20` tag；(4) 任意Docker参数拒绝；(5) create/start/wait/cleanup ordering；(6) normal-exit evidence；(7) non-zero evidence；(8) timeout与cleanup；(9) cleanup failure；(10) Docker unavailable/no-host-fallback；(11) deterministic canonical evidence；(12) stdout/stderr UTF-8 byte bounds。
+- 测试使用记录型process runner验证真实`DockerCLI`边界、使用脚本化CLI fake隔离外部Docker并验证真实`ContainerLifecycle`行为；Red不调用Docker daemon、网络或host fallback。
+- Collect-only命令=`PYTHONDONTWRITEBYTECODE=1 <project-python> -m pytest -p no:cacheprovider --collect-only tests/docker/test_executor.py -q`，结果=`12 tests collected in 0.01s`、exit 0。
+- Red命令=`PYTHONDONTWRITEBYTECODE=1 <project-python> -m pytest -p no:cacheprovider tests/docker/test_executor.py -q`，结果=`12 failed in 0.02s`；全部为`EXPECTED_INTERFACE_MISSING: WP-20 Docker execution contract`，production module缺失是唯一失败原因，无collection、syntax、test-import、Docker或environment failure【CONTEMPORANEOUS / VERIFIED】。
+- 环境说明：裸`python`不存在且system `python3`无pytest，正式证据改用仓库已有Python 3.12.3 / pytest 9.1.1环境；uv探测临时创建的`.venv`与`uv.lock`已在证据完成后删除，不属于工作包diff。
+- Scope check：SPEC/PLAN、schema/migration及WP-13至WP-19 production均未修改；Red未重新引入digest trust、security hardening、capability/namespace policy或其他延期scope。
+- Gate transition=`APPROVED FOR RED → RED COMPLETE`；下一阶段=`IMPLEMENTATION`，当前=`IMPLEMENTATION_NOT_STARTED / COMMIT_NOT_AUTHORIZED`。
+
+### WP-20 Implementation checkpoint
+
+- `2026-07-30 11:23:39 +0800`：Gate transition=`RED COMPLETE → IMPLEMENTATION`；`IMPLEMENTATION_STARTED`，仅创建批准的`src/coding_harness/sandbox/docker_cli.py`与`src/coding_harness/sandbox/lifecycle.py`【CONTEMPORANEOUS / VERIFIED】。
+- `DockerCLI` contract：frozen closed `DockerOperation`仅含create/start/wait/remove，`FixedImage`精确为`python:3.12`与`node:20`；`DockerCommand`不暴露Docker flags，adapter使用绝对CLI path、structured argv、`subprocess` runner与固定`shell=False`。不提供build/pull/push、shell或host fallback。
+- CLI result将normal/non-zero、timeout与`OSError`/Docker unavailable转为显式immutable result；wait解析container exit status，start/attach提供workload output，所有观察文本在adapter边界截断至4096 UTF-8 bytes。
+- `ContainerLifecycle.execute`执行create→start/attach→wait→remove；create unavailable不尝试宿主执行，已创建容器在start/wait失败或timeout后仍进入remove，cleanup失败覆盖为`CLEANUP_FAILED`且不伪装成功。
+- Frozen `ExecutionEvidence`绑定fixed image、command tuple及其SHA-256 identity、container identity、exit status、stdout/stderr summary、累计duration、occurred_at、timeout、cleanup及execution status；`evidence_digest=sha256(canonical_bytes())`，不写SQLite或其他persistence。
+- Authority boundary保持：WP-20只拥有Docker process/lifecycle与runtime evidence；不选择profile、不分类preflight/doctor、不修改Task/Lease、transaction/recovery或DomainEvent，不重新引入延期的digest trust/security hardening/capability/namespace scope。
+- Target命令=`PYTHONDONTWRITEBYTECODE=1 <project-python> -m pytest -p no:cacheprovider tests/docker/test_executor.py -q`，首次Green=`12 passed in 0.02s`【CONTEMPORANEOUS / VERIFIED】。
+- Full regression=`902 passed / 1 failed in 26.85s`；唯一failure为五个批准WP-20预提交路径触发`test_worktree_baseline_is_clean`，属于流程cleanliness gate。排除该自指节点的完整行为集合=`902 passed / 1 deselected in 25.45s`【CONTEMPORANEOUS / VERIFIED】。
+- 当前未调用真实Docker、未修改SPEC/PLAN、schema/migration或WP-13至WP-19 production，未stage/commit。Gate=`IMPLEMENTATION COMPLETE / REVIEW PENDING`。
+
+### WP-20 Review and review-fix checkpoint
+
+- `2026-07-30 11:38:23 +0800`：`REVIEW_STARTED`；只读review verdict=`CHANGES_REQUIRED`，Critical=`0`、Important=`5`、Minor=`1`【CONTEMPORANEOUS / VERIFIED】。
+- Review findings：`container_name`仅做通用文本检查，使`--help`/`--privileged`进入start/wait/remove option位置；create timeout落入`FAILED + NOT_REQUIRED`且不cleanup；非timeout `subprocess.SubprocessError`在cleanup逃逸；`ExecutionEvidence`接受caller提供的任意hex command identity；原12 tests只验证未知keyword与脚本化CLI happy/error结果，未覆盖value-level injection、adapter/lifecycle组合及public evidence member validation。
+- Gate transition=`IMPLEMENTATION COMPLETE → REVIEW → CHANGES_REQUIRED → REVIEW_FIX_STARTED`。Fix严格限于`docker_cli.py`、`lifecycle.py`、`test_executor.py`及两份过程文档，不扩大Docker security或其他WP authority。
+- Review-fix collect=`26 tests collected in 0.02s`。旧实现Red=`7 failed / 19 passed in 0.10s`；七项失败为两种option-like name、create timeout cleanup、cleanup SubprocessError、command identity tampering、malformed command member与oversized command member，无collection/environment/Docker failure【CONTEMPORANEOUS / VERIFIED】。
+- Fix 1：container identity必须匹配`[A-Za-z0-9][A-Za-z0-9_.-]*`，DockerCommand与ExecutionRequest使用同一验证，option-like identity在argv构造前拒绝。
+- Fix 2：create timeout明确分类`TIMED_OUT`并强制请求remove；remove结果进入`COMPLETE`或`CLEANUP_FAILED` evidence，不再宣称cleanup无需执行。
+- Fix 3：`DockerCLI`在`TimeoutExpired`专门分支之后捕获其他`subprocess.SubprocessError`并转换为结构化non-zero result，因此cleanup transport exception由lifecycle稳定转换为`CLEANUP_FAILED`。
+- Fix 4：`ExecutionEvidence.command_identity`改为`init=False`，仅由validated command canonical bytes的SHA-256派生；caller不能传入或replace伪造。Evidence自身验证tuple、item type/count/UTF-8 bytes、output bounds，继续保持frozen/slots及deterministic digest。
+- Expanded tests同时覆盖固定start/wait/remove argv、runner TimeoutExpired、malformed wait output、immutable evidence与oversized direct output；全部使用recording runner/fake adapter，不调用真实Docker。
+- Green=`26 passed in 0.03s`。Full regression=`916 passed / 1 failed in 29.08s`，唯一failure为五个批准预提交paths触发cleanliness gate；排除该自指节点后=`916 passed / 1 deselected in 28.98s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope/boundary保持：无digest trust、industrial security hardening、build/pull/push、SQLite/persistence、lease、recovery、Profile/Preflight/Doctor或schema/migration修改；未stage/commit/push。
+- Gate transition=`REVIEW_FIX_STARTED → REVIEW_FIX_COMPLETE`；下一阶段=`FINAL_REVIEW`，当前=`COMMIT_NOT_AUTHORIZED`。
+
+### WP-20 Final Review checkpoint
+
+- `2026-07-30 11:44:31 +0800`：Final Review verdict=`PASS`，Critical=`0`、Important=`0`、Minor=`0`【CONTEMPORANEOUS / VERIFIED】。
+- Finding resolution=`PASS`：container identity option injection、create-timeout cleanup、cleanup subprocess exception、command identity tampering及Evidence validation五类finding均由production validation与adversarial tests关闭。
+- DockerCLI boundary=`PASS`：绝对CLI、structured argv、固定`shell=False`、闭合create/start/wait/remove operation与固定`python:3.12`/`node:20` tag；无任意Docker flags、shell、build、pull或push。
+- Lifecycle/evidence=`PASS`：create→start/attach→wait→collect→remove；normal/non-zero/timeout/unavailable/cleanup-failure均返回结构化结果；frozen Evidence绑定derived command identity、image、container、exit、duration、bounded output及deterministic digest，无host fallback或persistence side effect。
+- Requirement verification=`PASS` for approved course subset：`SBX-006`、`SBX-010`、`SBX-011`、`SBX-012`及固定tag/runtime evidence合同。Deferred requirements保持：digest-level image trust与industrial container security hardening未实现、未验证、不得在WP-20 closeout中宣称满足。
+- Fresh target evidence=`26 passed in 0.03s`。Full regression=`916 passed / 1 failed in 28.92s`，唯一failure为五个批准预提交paths触发cleanliness gate；排除该自指节点的行为集合=`916 passed / 1 deselected in 28.59s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope confirmation：无WP-15 persistence、WP-17 lease、WP-18 recovery、WP-19 Profile/Preflight/Doctor、schema/migration、SPEC/PLAN修改；staging empty，未commit/push。
+- Gate transition=`FINAL_REVIEW_FIX_COMPLETE → FINAL_REVIEW_PASS → COMMIT_PREPARATION`。
