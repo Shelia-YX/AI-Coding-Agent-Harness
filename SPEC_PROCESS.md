@@ -1867,3 +1867,11 @@ Synthetic anchor、index、context、disposition、hash 与 compatibility feedba
 - Fresh target evidence=`26 passed in 0.03s`。Full regression=`916 passed / 1 failed in 28.92s`，唯一failure为五个批准预提交paths触发cleanliness gate；排除该自指节点的行为集合=`916 passed / 1 deselected in 28.59s`【CONTEMPORANEOUS / VERIFIED】。
 - Scope confirmation：无WP-15 persistence、WP-17 lease、WP-18 recovery、WP-19 Profile/Preflight/Doctor、schema/migration、SPEC/PLAN修改；staging empty，未commit/push。
 - Gate transition=`FINAL_REVIEW_FIX_COMPLETE → FINAL_REVIEW_PASS → COMMIT_PREPARATION`。
+
+### [RETROSPECTIVE] WP-20 Final Closeout checkpoint
+
+- [RETROSPECTIVE] [VERIFIED] Implementation commit=`620d6a8f73acc84c48bd27cc00c880f2169da4b6`；commit completion由main history验证。
+- [RETROSPECTIVE] [VERIFIED] PR merge message=`Merge pull request #11 from Shelia-YX/wp-20-docker-execution-lifecycle`；two-parent merge commit=`854a2969e1e459dc1ab88cfee5fd30c245251436`。
+- [RETROSPECTIVE] [VERIFIED] Main synchronization=`PASS`：local main、`origin/main` tracking ref与remote actual main一致，ahead/behind=`0/0`，post-test working tree clean。
+- [RETROSPECTIVE] [VERIFIED] Historical integrity=`WP-13 ~ WP-20 PASS`；clean-main regression=`917 collected / 917 passed / 0 failed in 28.88s`。
+- [RETROSPECTIVE] [VERIFIED] Final process gate=`WP20_FINAL_REVIEW_PASS → WP20_MERGED_VERIFIED → WP20_CLOSED`。
