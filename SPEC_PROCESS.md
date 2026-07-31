@@ -1988,3 +1988,172 @@ WP21_MAIN_VERIFICATION_VERIFIED
         ↓
 WP21_CLOSED
 ```
+
+## WP-22 Initialization checkpoint
+
+- `2026-07-31 10:42:18 +0800`：WP-22课程级Credential/Provider Boundary ownership开始；创建linked worktree=`.worktrees/wp-22-credential-provider`及branch=`wp-22-credential-provider`【CONTEMPORANEOUS / VERIFIED】。
+- Baseline=`609705da3e892b08330e589000ea3d2c0972db18`，与创建时clean main HEAD一致；`.worktrees/` ignore rule已验证，新worktree初始clean、staging empty，main工作区内容与HEAD未修改【CONTEMPORANEOUS / VERIFIED】。
+- Historical integrity=`WP-13 ~ WP-21 PASS`；全部implementation commits均为WP-22 HEAD ancestor【CONTEMPORANEOUS / VERIFIED】。
+- Baseline regression在本checkpoint文档修改前执行，命令禁用bytecode与pytest cache，结果=`958 collected / 958 passed / 0 failed in 24.37s`【CONTEMPORANEOUS / VERIFIED】。
+- Scope保持课程级：当前不引入工业级Secret Management、Vault/KMS/HSM或扩展threat model；尚未开始credential contract/provider boundary的planning设计或implementation。
+- 当前仅修改`AGENT_LOG.md`与`SPEC_PROCESS.md`以记录初始化；无production、tests、schema/migration、SPEC或PLAN修改，未stage/commit/push。
+- Gate transition=`INIT → PLANNING`；当前状态=`INIT COMPLETE / READY FOR PLANNING`。
+
+## WP-22 Planning checkpoint
+
+- `2026-07-31 10:47:27 +0800`：`PLANNING_STARTED`；复核WP-13~WP-21现有authority、WP-21 `RunConfigSnapshot` / `ProviderGateway` / `ProviderTransport`接口，以及冻结`SPEC.md`与`PLAN.md`中的WP-22 requirements、PV、精确文件和Red cases【CONTEMPORANEOUS / VERIFIED】。
+- 课程级候选设计：immutable且provider-bound的credential contract；由宿主startup trusted injection构造的窄`CredentialProvider`；exact provider matching；missing/mismatch deterministic fail-closed；`repr`、异常、日志和普通evidence只暴露非敏感状态，不暴露credential value。
+- Threat model边界：不防御同进程Python reflection、memory dump、已失陷runtime、弱口令或物理介质恢复；不引入Vault、KMS/HSM、云Secret Manager、credential rotation platform、多用户IAM或WebUI secret management。
+- Authority boundary：WP-22 MAY提供credential capability与非敏感状态；MUST NOT修改Task lifecycle、Agent state、Execution Lease、SQLite/Persistence、Docker execution、Apply/Recovery或WP-21 Provider protocol，也不得把credential注入Task Workspace、任务容器或LLM上下文。
+- Requirement mapping发现：冻结WP-22 owned=`CRD-001..013`,`SEC-007..008`,`SEC-010..013`,`TST-007`。其中`CRD-001..006`,`CRD-008`,`CRD-010..013`与`TST-007`要求本地口令加密文件、KDF+AEAD、权限、TTY unlock、CLI lifecycle和原子更新；`SEC-007..008`,`SEC-011..012`要求Context Export治理。仅实现credential provider contract只能支持`CRD-007`,`CRD-009`,`SEC-010`,`SEC-013`及`AGT-014`的部分边界，不能宣称关闭完整owned PV。
+- Frozen PLAN精确production范围=`agent/export.py`,`credentials/crypto.py`,`credentials/store.py`,`credentials/runtime.py`,`cli/credentials.py`，test=`tests/unit/credentials/test_credentials.py`。若保留冻结WP-22范围，应沿用这些文件；若批准scope reduction，建议最小范围为`credentials/models.py`,`credentials/provider.py`及`tests/unit/credentials/test_provider.py`，并由人工明确延期requirements和integration seam，不能由实现者自行替换PLAN authority。
+- Integration blocker：现有WP-21 `ProviderGateway`仅接收`RunConfigSnapshot`与`ProviderTransport`，`ProviderRequest`没有credential capability；在“不修改Provider protocol”的约束下，WP-22无法证明credential被固定Provider可信消费。必须由人工选择窄集成方式或明确本WP只产出未接线contract。
+- Failure strategy候选：missing、unknown provider、provider mismatch、malformed/oversized trusted injection均返回闭合、无secret的configuration failure；不fallback、不读取repository/Issue/LLM/tool output，不将credential写入Persistence、workspace、container或context。
+- Planned tests候选：contract immutability与provider binding；trusted source allow/reject；missing/mismatch fail-closed；无fallback；`repr`/`str`/error/audit-like summary masking；bounded inputs；不测试reflection、memory dump或runtime compromise。正式Red节点和文件须等待scope裁决后冻结。
+- 本checkpoint仅修改`AGENT_LOG.md`与`SPEC_PROCESS.md`；未创建production/tests/schema/migration，未修改SPEC/PLAN，未stage/commit/push。
+- Gate：
+
+```text
+INIT COMPLETE
+        ↓
+PLANNING
+        ↓
+PLANNING BLOCKED / WAITING HUMAN DECISION
+```
+
+## WP-22 Scope Reduction Decision checkpoint
+
+- `2026-07-31 10:52:04 +0800`：人工批准课程级scope reduction，planning中发现的requirement范围冲突与Provider integration seam blocker均已裁决【CONTEMPORANEOUS / APPROVED DECISION】。
+- Final WP-22 responsibility：immutable Credential contract、窄`CredentialProvider` interface、trusted startup injection、exact Provider binding、missing/mismatch deterministic fail-closed、secret non-leak behavior。
+- Trusted source限定为宿主startup composition显式注入；repository、Issue、LLM response、tool output、Task字段、workspace与container均不是credential authority。Missing或Provider mismatch不得调用transport、不得fallback，并映射到既有确定性configuration failure。
+- Approved production=`src/coding_harness/credentials/models.py`,`src/coding_harness/credentials/provider.py`；approved test=`tests/unit/credentials/test_provider.py`。
+- Integration exception：允许在既有WP-21 `ProviderGateway`增加最小credential seam，以消费WP-22 capability；不得修改`ProviderRequest`/`ProviderTransport` protocol、Provider error taxonomy、AgentLoop、Task lifecycle或其他authority。该例外仅用于固定Provider调用前的credential resolution与fail-closed门禁。
+- Explicitly excluded：encrypted credential store、KDF/AEAD、TTY unlock、credential CLI lifecycle、Context Export subsystem、Vault/KMS/HSM、rotation、enterprise IAM、WebUI secret management。
+- Deferred requirements：`CRD-001..013`中未被本scope覆盖的部分；`SEC-007..013`中依赖Context Export的部分；完整`TST-007`。本WP的contract/non-leak测试只能作为覆盖到的部分证据，不得被记录为上述完整PV已关闭。
+- Authority boundary保持：WP-22不修改Task或Agent state、Persistence/SQLite、Execution Lease、Docker、Apply/Recovery；不保存长期credential history；不把secret放入payload、日志、错误、普通evidence、workspace、container或LLM context。
+- Red阶段文件和行为范围已冻结，但本checkpoint尚未创建production/tests，也未进入Red执行；`SPEC.md`与`PLAN.md`保持不变。
+- Gate：
+
+```text
+PLANNING BLOCKED
+        ↓
+PLANNING COMPLETE
+        ↓
+APPROVED FOR RED
+```
+
+## WP-22 Red checkpoint
+
+- `2026-07-31 10:56:17 +0800`：`RED_STARTED`；仅创建批准的`tests/unit/credentials/test_provider.py`，production仍不存在【CONTEMPORANEOUS / VERIFIED】。
+- Test scope共9个真实行为节点：Credential immutability；默认`str/repr` redaction；trusted startup source snapshot；`CredentialProvider` contract与exact lookup；missing与provider mismatch deterministic failure；no fallback；secret不进入error/provider surfaces；非bytes untrusted startup value拒绝且不回显。
+- Collect-only=`9 tests collected in 0.01s`，collection成功【CONTEMPORANEOUS / VERIFIED】。
+- Red=`9 failed in 0.02s`：2个model nodes为`EXPECTED_INTERFACE_MISSING: WP-22 credential model contract`，7个provider nodes为`EXPECTED_INTERFACE_MISSING: WP-22 credential provider contract`；失败原因精确为批准接口尚不存在，不是collection、syntax、test mistake、network或环境错误【CONTEMPORANEOUS / VERIFIED】。
+- Runner evidence：工作区无`python`命令且system `python3`无pytest；这两次只用于定位项目runner，不计入Red。最终通过现有uv/pytest隔离环境执行有效collect-only和Red，不创建project virtualenv或依赖artifact。
+- Scope保持：未创建`credentials/models.py`或`credentials/provider.py`，未修改`ProviderRequest`、`ProviderTransport`、Task、Persistence、Lease、Docker、Recovery、schema/migration、SPEC或PLAN；未进入Green。
+- Gate：
+
+```text
+APPROVED FOR RED
+        ↓
+RED COMPLETE
+        ↓
+IMPLEMENTATION PENDING
+```
+
+## WP-22 Implementation checkpoint
+
+- `2026-07-31 11:05:51 +0800`：Gate=`RED COMPLETE → IMPLEMENTATION`；`IMPLEMENTATION_STARTED`【CONTEMPORANEOUS / VERIFIED】。
+- Created only approved production：`src/coding_harness/credentials/models.py`,`src/coding_harness/credentials/provider.py`。
+- `Credential`为frozen/slots contract：bounded provider identity、immutable bytes secret、非敏感deterministic startup slot reference；默认`repr/str` redacted，显式`secret_bytes()`是唯一正常secret access。
+- `StartupCredentialProvider`仅从strict startup mapping构造immutable tuple snapshot；实现runtime-checkable `CredentialProvider`与exact lookup。空source返回`MISSING_CREDENTIAL`；存在credential但无exact provider binding返回`CREDENTIAL_PROVIDER_MISMATCH`；不fallback，错误/repr不包含secret。
+- Existing Red suite首次Green=`9 passed in 0.02s`【CONTEMPORANEOUS / VERIFIED】。
+- Minimality：当前9个contract nodes不要求`ProviderGateway` seam，故未修改WP-21文件；未触及Provider protocol、Task、Persistence、Lease、Docker、Recovery、schema/migration、SPEC或PLAN。
+- Full regression blocker：pytest默认prepend import mode把`tests/unit/agent/test_provider.py`与`tests/unit/credentials/test_provider.py`都作为顶层module `test_provider`，产生`import file mismatch` collection error。根因由重复basename、两目录均无package marker及完整error复现确认。
+- Diagnostic full run使用`--import-mode=importlib`隔离module identity，结果=`966 passed / 1 failed in 25.02s`；唯一failure为5个批准dirty paths触发pre-commit cleanliness gate，说明未观察到行为回归，但不能替代默认full suite门禁。
+- 最小持久修复需要新增`tests/unit/credentials/__init__.py`，或由人工批准重命名已冻结测试文件。两者均超出当前精确文件清单，故未执行。
+- Current gate：
+
+```text
+RED COMPLETE
+        ↓
+IMPLEMENTATION
+        ↓
+IMPLEMENTATION BLOCKED / WAITING SCOPE AUTHORIZATION
+```
+
+## WP-22 Implementation Gate Completion checkpoint
+
+- `2026-07-31 11:13:25 +0800`：人工授权新增`tests/unit/credentials/__init__.py`，仅用于赋予批准测试目录稳定package identity；不属于credential功能或测试行为scope扩展【CONTEMPORANEOUS / APPROVED DECISION】。
+- 空package marker关闭pytest默认prepend import mode下`tests/unit/agent/test_provider.py`与`tests/unit/credentials/test_provider.py`的顶层module collision。未修改production、已有测试逻辑、pytest配置、WP-21 Provider protocol或其他authority。
+- Default WP-22 Green=`9 passed in 0.02s`【CONTEMPORANEOUS / VERIFIED】。
+- Default full pytest已成功collect并执行967 nodes：`966 passed / 1 failed in 24.88s`。唯一failure=`test_worktree_baseline_is_clean`，原因是当前六个批准WP-22 paths处于预提交dirty状态；该节点同时拒绝dirty与staged paths，在“不要commit”约束下无法为PASS，不属于behavior regression。
+- 排除上述单一自指流程门禁后的完整行为回归=`966 passed / 1 deselected in 27.49s`【CONTEMPORANEOUS / VERIFIED】。
+- Implementation与default-import collision均已完成；clean-worktree最终证据必须在commit后clean HEAD重跑。当前记录真实结果，不将pre-commit full pytest描述为全PASS。
+- Scope仍严格限定为`credentials/models.py`,`credentials/provider.py`,`tests/unit/credentials/test_provider.py`,`tests/unit/credentials/__init__.py`及两份过程文档；无ProviderGateway seam、SPEC/PLAN、schema/migration或其他authority修改。
+- Gate：
+
+```text
+IMPLEMENTATION BLOCKED
+        ↓
+TEST PACKAGE AUTHORIZED
+        ↓
+IMPLEMENTATION COMPLETE / REVIEW PENDING
+```
+
+## WP-22 Review and Review-Fix Scope checkpoint
+
+- `2026-07-31 11:25:59 +0800`：`REVIEW_STARTED`；只读review verdict=`CHANGES_REQUIRED`，Critical/Important/Minor=`0/1/1`【CONTEMPORANEOUS / VERIFIED】。
+- Important finding：`CredentialProvider`尚无production consumer；当前`ProviderGateway`未resolve credential即可调用transport，missing/mismatch没有映射到既有`PROVIDER_CONFIGURATION_ERROR`。
+- Minor finding：tests未绑定`slot_reference`安全性，也没有Gateway success/missing/mismatch、transport zero-call与configuration mapping行为证据。
+- Review evidence：WP-22=`9 passed in 0.02s`；default full=`966 passed / 1 failed in 27.78s`，唯一failure为六个批准dirty paths触发pre-commit cleanliness gate。
+- 人工批准的fix语义要求credential seam成为调用transport前的必需门禁，且不得修改`ProviderRequest`/`ProviderTransport`。
+- Scope verification发现既有WP-21 `tests/unit/agent/test_provider.py`有两个`ProviderGateway`构造点，均未注入credential。正确的required seam会使这些既有contract tests在构造阶段失败；optional/default credential seam则保留无credential执行路径，无法关闭finding。
+- 因`tests/unit/agent/test_provider.py`未在当前批准文件清单，当前未开始review-fix Red、未修改production/tests，也未引入implicit credential。需要人工授权仅为这两个既有Gateway test构造点注入trusted test credential。
+- Gate：
+
+```text
+IMPLEMENTATION COMPLETE
+        ↓
+REVIEW / CHANGES REQUIRED
+        ↓
+REVIEW FIX BLOCKED / WAITING TEST SCOPE AUTHORIZATION
+```
+
+## WP-22 Review Fix checkpoint
+
+- `2026-07-31 11:43:48 +0800`：人工批准`tests/unit/agent/test_provider.py`作为窄测试兼容范围，仅给两个既有Gateway构造点注入trusted fake credential；不改变WP-21行为断言【CONTEMPORANEOUS / APPROVED DECISION】。
+- `REVIEW_FIX_STARTED`；新增4个behavior nodes，覆盖slot reference non-leak、credential success→transport called、missing→configuration error/zero-call、mismatch→configuration error/zero-call/error non-leak。
+- Old implementation Red=`3 failed / 10 passed in 0.04s`；3个失败均为`ProviderGateway.__init__() got an unexpected keyword argument 'credential_provider'`，准确证明mandatory seam缺失【CONTEMPORANEOUS / VERIFIED】。
+- Minimal production fix仅修改`src/coding_harness/agent/provider.py`：`CredentialProvider`成为required dependency；execute在request、budget和transport之前resolve固定provider；返回值必须是绑定同一provider identity的`Credential`。
+- Missing、mismatch、unexpected resolver failure与invalid binding统一映射到既有`ProviderErrorCode.CONFIGURATION_ERROR`，reason为无secret固定文本，transport调用次数保持0。`ProviderRequest`与`ProviderTransport` protocol不变。
+- Green evidence：WP-22=`13 passed in 0.03s`；WP-21 provider=`20 passed in 0.07s`；combined=`33 passed in 0.08s`【CONTEMPORANEOUS / VERIFIED】。
+- Default full regression=`970 passed / 1 failed in 27.92s`，唯一failure为8个批准dirty paths触发`test_worktree_baseline_is_clean`；排除该自指流程门禁后的行为集合=`970 passed / 1 deselected in 27.71s`，无行为回归。
+- Scope verification：无encrypted store、CLI、rotation、Context Export、Vault/KMS/HSM、schema/migration、Task、Persistence、Lease、Docker、Recovery、SPEC或PLAN修改；未stage/commit/push。
+- Gate：
+
+```text
+REVIEW FIX BLOCKED
+        ↓
+REVIEW FIX SCOPE APPROVED
+        ↓
+REVIEW FIX COMPLETE / FINAL REVIEW PENDING
+```
+
+## WP-22 Final Review and Documentation Sync checkpoint
+
+- `2026-07-31 11:49:30 +0800`：严格只读Final Review完成；verdict=`FINAL_REVIEW_PASS`，Critical/Important/Minor=`0/0/0`【CONTEMPORANEOUS / VERIFIED】。
+- Provider integration=`PASS`：`credential_provider`为Gateway required dependency；execute在request、budget和transport之前resolve固定provider；missing、mismatch、resolver exception与invalid binding均产生既有`PROVIDER_CONFIGURATION_ERROR`且transport zero-call。
+- Secret boundary=`PASS`：Credential `repr/str`、slot reference、lookup exception、Gateway ProviderError、provider repr与`ProviderRequest`均不暴露credential secret；Gateway不传播CredentialError reason。
+- WP-21 compatibility=`PASS`：`ProviderRequest`与`ProviderTransport` protocol未修改；WP-21 tests只在两个既有Gateway构造点注入trusted fake credential，原行为断言保持。
+- Fresh test evidence：WP-22=`13 passed in 0.03s`；WP-21 Provider=`20 passed in 0.07s`；default full=`970 passed / 1 failed in 28.13s`。唯一failure=`test_worktree_baseline_is_clean`，精确由8个批准pre-commit dirty paths触发，分类为process cleanliness gate，不是behavior regression。
+- Scope confirmation：未实现encrypted credential store、credential CLI lifecycle、rotation、Context Export、Vault/KMS/HSM；未修改Task lifecycle、Persistence、Lease、Docker、Recovery或schema/migration。
+- 本documentation sync仅修改`AGENT_LOG.md`与`SPEC_PROCESS.md`；production/tests内容保持Final Review时状态，`SPEC.md`/`PLAN.md`不变，未stage/commit/push。
+- Gate：
+
+```text
+REVIEW_FIX_COMPLETE
+        ↓
+FINAL_REVIEW_PASS
+        ↓
+DOCUMENTATION_SYNC_COMPLETE
+```
