@@ -19,3 +19,41 @@ linked worktree 将批准的 Day 1 变更与干净的 `main` 隔离，同时共�
 前期过程文档未遵守“项目文档全部使用中文”的固定要求，本次完成合规纠正。后续所有开发 Prompt、过程文档、审查报告和用户可见说明均应使用中文；仅技术标识符保留英文。
 
 中文化期间发现，测试把两句英文叙述和已完成快照分支当成固定契约，造成语言要求与测试运行上下文冲突。权威裁决要求测试验证稳定的过程语义与显式批准的纠正工作树，同时保留冻结摘要、main、祖先、index 和 dirty path 保护。本次仅做相应的最小测试契约修复，不改变 Requirement、PV、证据状态或历史事实；审查、stage 与 commit 仍为 `PENDING`。
+
+# 项目最终反思
+
+## 从机制堆叠到清晰边界
+
+项目最终形成了 Agent、Governance、Workspace、Transaction、Persistence、Recovery、
+Sandbox、Provider 和 Credential 等相互独立的能力。最重要的设计经验不是增加接口数量，
+而是保持 authority boundary：ChangeSet 不负责写回，Persistence 不负责 Apply，
+Startup Recovery 不执行恢复，Credential Provider 不改变 Provider protocol。清晰边界让
+每个工作包可以被单独测试和审查。
+
+## TDD 与 worktree
+
+TDD 的价值主要体现在阻止“为了通过演示而补功能”。Red 必须来自缺失接口或可观察行为，
+不能来自 collection 或环境问题。linked worktree 则让每个 WP 和最终收敛阶段都拥有明确
+baseline，避免 main 上的未提交状态污染测试证据。多次 cleanliness gate 也提醒我们区分
+行为回归与提交过程状态。
+
+## 确定性与失败反馈
+
+Mock LLM、结构化 ToolResult、Policy decision、Manifest digest、ChangeSet、transaction
+journal 和 recovery finding 都采用闭合、可审计的表示。失败不是日志字符串，而是下一轮
+决策输入；不确定文件副作用不能被报告为成功。这使 Harness 的主要贡献可以通过离线测试
+和三个短小 examples 复现。
+
+## Scope Reduction
+
+原冻结计划包含 API、SSE、WebUI、完整 credential store、Node 跨 profile 和正式
+distribution。人工澄清课程目标后，项目进行了明确的 scope reduction：保留核心受治理
+执行机制，把产品界面和工业级安全能力延期。过程文档保留原 Requirement ID 与语义，
+没有把 deferred 内容误报为已实现。
+
+## 最终取舍
+
+Finalization 不新增 product entrypoint，也不复制 production logic。README、离线 CI、
+examples 和 verification checklist 只把已有能力组织成可运行、可演示、可复现的课程提交。
+如果继续发展，下一步应先根据真实使用需求选择 API 或 distribution，而不是同时恢复所有
+延期工作包。
