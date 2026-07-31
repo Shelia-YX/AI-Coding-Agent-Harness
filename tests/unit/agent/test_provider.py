@@ -70,11 +70,19 @@ def _result(provider, status, *, response=b"", redirect_location=None):
     )
 
 
+def _credential_provider():
+    credentials = importlib.import_module("coding_harness.credentials.provider")
+    return credentials.StartupCredentialProvider.from_startup(
+        credentials={"course-provider": b"trusted-unit-test-secret"},
+    )
+
+
 def _gateway(provider, outcomes: list[object]):
     transport = _FakeTransport(outcomes)
     gateway = provider.ProviderGateway(
         snapshot=_snapshot(),
         transport=transport,
+        credential_provider=_credential_provider(),
     )
     return gateway, transport
 
@@ -324,7 +332,11 @@ def test_gateway_rejects_post_construction_endpoint_tampering() -> None:
         response=b"ok",
     )
     transport = _FakeTransport([success])
-    gateway = provider.ProviderGateway(snapshot=snapshot, transport=transport)
+    gateway = provider.ProviderGateway(
+        snapshot=snapshot,
+        transport=transport,
+        credential_provider=_credential_provider(),
+    )
     with pytest.raises((AttributeError, TypeError)):
         object.__setattr__(
             snapshot,

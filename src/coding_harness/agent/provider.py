@@ -18,6 +18,11 @@ from coding_harness.config import (
     REQUEST_TIMEOUT_SECONDS,
     RunConfigSnapshot,
 )
+from coding_harness.credentials.models import Credential
+from coding_harness.credentials.provider import (
+    CredentialError,
+    CredentialProvider,
+)
 
 
 _MAX_REASON_BYTES = 4_096
@@ -163,6 +168,7 @@ class ProviderTransport(Protocol):
 class ProviderGateway:
     __slots__ = (
         "_budget_lock",
+        "_credential_provider",
         "_endpoint",
         "_provider_identity",
         "_remaining_requests",
@@ -175,6 +181,7 @@ class ProviderGateway:
         *,
         snapshot: RunConfigSnapshot,
         transport: ProviderTransport,
+        credential_provider: CredentialProvider,
     ) -> None:
         if type(snapshot) is not RunConfigSnapshot:
             raise ValueError("provider gateway requires a RunConfigSnapshot")
@@ -184,6 +191,8 @@ class ProviderGateway:
             raise ValueError("provider gateway requires an intact config snapshot")
         if not isinstance(transport, ProviderTransport):
             raise ValueError("provider transport does not satisfy the contract")
+        if not isinstance(credential_provider, CredentialProvider):
+            raise ValueError("credential provider does not satisfy the contract")
         budget_limits = dict(snapshot.budget_hard_limits)
         request_limit = budget_limits.get("llm_requests")
         if type(request_limit) is not int or request_limit < 0:
@@ -193,9 +202,32 @@ class ProviderGateway:
         self._request_timeout_seconds = snapshot.request_timeout_seconds
         self._remaining_requests = request_limit
         self._budget_lock = Lock()
+        self._credential_provider = credential_provider
         self._transport = transport
 
     def execute(self, *, payload: bytes, max_tokens: int) -> ProviderResult:
+        try:
+            credential = self._credential_provider.resolve(
+                self._provider_identity
+            )
+        except CredentialError:
+            raise ProviderError(
+                code=ProviderErrorCode.CONFIGURATION_ERROR,
+                reason="provider credential configuration is invalid",
+            ) from None
+        except Exception:
+            raise ProviderError(
+                code=ProviderErrorCode.CONFIGURATION_ERROR,
+                reason="credential provider failed its contract",
+            ) from None
+        if (
+            type(credential) is not Credential
+            or credential.provider_identity != self._provider_identity
+        ):
+            raise ProviderError(
+                code=ProviderErrorCode.CONFIGURATION_ERROR,
+                reason="credential provider returned an invalid binding",
+            )
         request = ProviderRequest(
             provider_identity=self._provider_identity,
             endpoint=self._endpoint,
