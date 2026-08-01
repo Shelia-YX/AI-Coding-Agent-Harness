@@ -2412,3 +2412,24 @@ GITHUB_ACTIONS_REMOTE_DOCUMENTATION_SYNC_COMPLETE
         ↓
 CLOSEOUT_COMMIT_PENDING
 ```
+
+## Project Finalization Main Closeout checkpoint
+
+- `2026-08-01 16:29:15 +0800`：Finalization PR merge已在`main`验证。Merge commit=`71281e59e59456e6ac668e5eec7b8a97bf5865dd`，message=`Merge pull request #14 from Shelia-YX/project-finalization-course-submission`，parents=`65bdf9fac2a9bc92abb772e2df425f6a4732778c`与`5bc6aa9b984ff30138e830db2ae633f77e83231d`【RETROSPECTIVE / VERIFIED】。
+- Main synchronization：local HEAD=`origin/main`=`remote actual main`=`71281e59e59456e6ac668e5eec7b8a97bf5865dd`，ahead/behind=`0/0`；验证前working tree clean【VERIFIED】。
+- Integration ancestry：Finalization、GitHub Actions workflow、checkout-history fix及remote-verification documentation commits均属于当前main ancestry【VERIFIED】。
+- Clean-main regression：`982 collected / 982 passed / 0 failed in 28.57s`；`test_worktree_baseline_is_clean`恢复通过【VERIFIED】。
+- Artifact verification：排除linked worktrees后，无`__pycache__`、`.pyc`、`.pytest_cache`、`build/`、`dist/`、`*.egg-info`、database或temporary/editor artifact【VERIFIED】。
+- GitHub Actions remote verification：人工确认commit `90d76b5c1e72b7fe4f50c85b38809fb7ca4170c0`的workflow run=`Success`且`fetch-depth: 0`关闭shallow ancestry failure【USER_REPORTED】；本记录不伪装为本环境独立run元数据查询。
+- Boundary：`SPEC.md`、`PLAN.md`、production与tests未修改；本阶段仅追加`AGENT_LOG.md`和`SPEC_PROCESS.md`。Final status=`PROJECT_CLOSED`。
+- Final gate：
+
+```text
+FINALIZATION_MERGED_VERIFIED
+        ↓
+MAIN_REGRESSION_VERIFIED
+        ↓
+ARTIFACT_VERIFIED
+        ↓
+PROJECT_CLOSED
+```
