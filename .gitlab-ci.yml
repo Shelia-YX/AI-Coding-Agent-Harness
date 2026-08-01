@@ -1,0 +1,13 @@
+stages:
+  - test
+
+unit-test:
+  stage: test
+  image: python:3.12
+  variables:
+    PYTHONDONTWRITEBYTECODE: "1"
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  before_script:
+    - python -m pip install pytest
+  script:
+    - python -m pytest -p no:cacheprovider -q

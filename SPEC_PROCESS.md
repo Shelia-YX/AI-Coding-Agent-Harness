@@ -2177,3 +2177,238 @@ WP22_MAIN_VERIFICATION_VERIFIED
         ↓
 WP22_CLOSED
 ```
+
+## Project Finalization Scope Decision and Red checkpoint
+
+- `2026-07-31 13:18:29 +0800`：人工批准采用`Evidence-first Course Closeout`，本阶段定位为课程提交证据收敛，不是产品化开发【CONTEMPORANEOUS / APPROVED DECISION】。
+- Worktree=`.worktrees/project-finalization-course-submission`，branch=`project-finalization-course-submission`，baseline=`65bdf9fac2a9bc92abb772e2df425f6a4732778c`；初始化完整回归=`971 passed in 26.49s`【CONTEMPORANEOUS / VERIFIED】。
+- Finalization owned scope：
+  - `README.md`：准确描述现有能力、运行/测试/演示命令、环境、威胁边界、恢复、清理与延期项。
+  - `examples/governance_demo.py`、`examples/feedback_demo.py`、`examples/recovery_demo.py`：只组合现有public contracts展示治理拒绝、失败反馈改变下一动作、事务失败后无partial effect并进入recovery；由tests验证。
+  - `.gitlab-ci.yml`：包含名称严格为`unit-test`的job；允许dependency installation，但测试执行必须offline、不得需要API key、Docker daemon或其他external service。
+  - `REFLECTION.md`：追加项目最终反思并保留早期历史。
+  - Finalization contract tests与最终verification checklist。
+- Scope adjustment：不新增product entrypoint；packaging/install smoke降为optional；任何production gap必须停止并申请scope decision，不得为演示越权修改`src/coding_harness/**`。
+- Deferred/deviation items：
+  - WP-23 API、WP-24 SSE、WP-25 WebUI。
+  - WP-27 Node跨profile runtime evidence。
+  - WP-26中API/static/serve CLI部分，以及WP-29中依赖WebUI/serve的distribution/cold-start部分。
+  - 完整encrypted credential store、credential CLI lifecycle、Context Export。
+  - 真实Docker security integration evidence与工业级安全强化。
+- `SPEC.md`与`PLAN.md`继续冻结；上述延期项保持原Requirement ID与语义，不得报告为`IMPLEMENTED`或`VERIFIED`。课程Finalization完成状态只表示人工批准后的提交范围闭合，不表示冻结完整MVP全部实现。
+- Red contract限定为过程文档与`tests/finalization/`；缺失的README、CI、final reflection与三个examples必须产生可归因的artifact/behavior failures，禁止collection/import/environment failure。
+- Gate：
+
+```text
+FINALIZATION_PLANNING_COMPLETE
+        ↓
+SCOPE_ADJUSTMENT_APPROVED
+        ↓
+APPROVED_FOR_RED
+        ↓
+RED_STARTED
+```
+
+### Finalization Red evidence
+
+- `2026-07-31 13:19:46 +0800`：仅新增`tests/finalization/test_submission.py`，未创建任何提交物实现或修改production。
+- Collect-only=`7 tests collected in 0.01s`；无syntax、import或collection error【CONTEMPORANEOUS / VERIFIED】。
+- Target Red=`6 failed / 1 passed in 0.02s`【CONTEMPORANEOUS / VERIFIED】：
+  - README：`EXPECTED_DOCUMENTATION_MISSING: README.md`。
+  - CI：`EXPECTED_ARTIFACT_MISSING: .gitlab-ci.yml`。
+  - Reflection：`EXPECTED_DOCUMENTATION_MISSING: final reflection`。
+  - Governance、feedback、recovery三个examples：各自为`EXPECTED_ARTIFACT_MISSING`。
+  - Scope-deviation record节点PASS，证明人工批准的Finalization boundary与deferred items已落盘。
+- Failure classification=`EXPECTED_DOCUMENTATION_MISSING / EXPECTED_ARTIFACT_MISSING`；无environment或无关failure。
+- Gate：
+
+```text
+RED_STARTED
+        ↓
+RED_COMPLETE
+        ↓
+IMPLEMENTATION_PENDING
+```
+
+### Finalization Implementation checkpoint
+
+- `2026-07-31 13:30:14 +0800`：Gate=`RED_COMPLETE → IMPLEMENTATION_STARTED`；实现严格限于批准的课程提交artifact、finalization contracts与过程文档【CONTEMPORANEOUS】。
+- Artifacts：
+  - `README.md`说明实际能力、architecture authority、Python 3.12运行方式、tests/demos、CI、recovery、课程级threat boundary、deferred scope、cleanup与final verification checklist。
+  - `.gitlab-ci.yml`提供单一`unit-test` job；dependency installation允许联网，但测试执行不使用API key、Docker daemon或external service。
+  - `governance_demo.py`直接使用`PolicyEngine`，确定性证明policy DENY与executor zero-call。
+  - `feedback_demo.py`直接使用`MockLLM`、`ContextBuilder`与`ToolResult`，证明失败反馈进入下一轮context并改变action。
+  - `recovery_demo.py`直接使用`ApplyCoordinator`与真实baseline/workspace/changeset contracts；文件系统拒绝首个目标操作后，无partial effect并进入`RECOVERY_REQUIRED`。现有public API没有演示专用fault-injection seam，因此不伪造`ROLLED_BACK`，更深rollback/startup-recovery故障注入继续由既有transaction integration suite验证。
+  - `REFLECTION.md`追加最终课程反思，不改写早期记录。
+- Green evidence：`pytest tests/finalization/test_submission.py -q = 7 passed in 0.12s`；`pytest tests/demos -q = 3 passed in 0.12s`【CONTEMPORANEOUS / VERIFIED】。
+- Full regression=`980 passed / 1 failed in 25.03s`；唯一failure=`test_worktree_baseline_is_clean`，由10个批准pre-commit dirty paths触发，分类为process cleanliness gate而非behavior regression。排除该自指节点后，完整行为集合分拆验证为`874 passed`与`106 passed / 1 deselected`【CONTEMPORANEOUS / VERIFIED】。
+- Scope verification：未修改`src/coding_harness/**`、既有tests、`SPEC.md`或`PLAN.md`；未实现API、WebUI、SSE、Node profile或product entrypoint；未stage/commit/push。
+- Gate：
+
+```text
+RED_COMPLETE
+        ↓
+IMPLEMENTATION_STARTED
+        ↓
+IMPLEMENTATION_COMPLETE
+        ↓
+REVIEW_PENDING
+```
+
+### Finalization Review Fix checkpoint
+
+- `2026-07-31 13:43:40 +0800`：Final Review verdict=`CHANGES_REQUIRED`，Critical/Important/Minor=`0/1/1`【CONTEMPORANEOUS / VERIFIED】。
+- Important finding：`recovery_demo.py`依赖`chmod(0555)`阻止目标操作；root/特权执行身份可以绕过该权限，因此不满足跨执行身份deterministic要求。Minor finding：存在三个`__pycache__`目录及对应`.pyc`。
+- Review Fix Red：在demo test中令任何`Path.chmod`调用直接失败；旧实现结果=`1 failed`，精确证明permission依赖，无collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Minimal fix：删除chmod与filesystem-permission fault；通过公开`ApplyJournal.record` contract临时注入PREPARING journal persistence failure，并由真实`ApplyCoordinator`返回`RECOVERY_REQUIRED`。注入使用标准context patch自动恢复；未调用transaction私有函数、未复制Apply/rollback/recovery逻辑、未增加production seam。
+- Green evidence：
+  - exact recovery node=`1 passed in 0.13s`；
+  - direct demo=`{"partial_effect":false,"result":"RECOVERY_REQUIRED","scenario":"recovery_rollback"}`；
+  - finalization=`7 passed in 0.12s`；
+  - demos=`3 passed in 0.11s`；
+  - full pytest=`980 passed / 1 failed in 26.80s`，唯一failure为10个批准dirty paths触发pre-commit cleanliness gate；
+  - 排除该自指门禁=`980 passed / 1 deselected in 26.68s`。
+- Artifact fix：删除`examples/__pycache__`、`tests/demos/__pycache__`、`tests/finalization/__pycache__`及其`.pyc`。
+- Boundary：未修改`src/coding_harness/**`、既有tests、`SPEC.md`或`PLAN.md`；未新增功能、product entrypoint或production contract；未stage/commit/push。
+- Gate：
+
+```text
+REVIEW
+        ↓
+CHANGES_REQUIRED
+        ↓
+REVIEW_FIX_STARTED
+        ↓
+REVIEW_FIX_COMPLETE
+        ↓
+FINAL_REVIEW_RETRY_PENDING
+```
+
+### Project Finalization Final Review PASS checkpoint
+
+- `2026-07-31 13:51:57 +0800`：严格只读Final Review Retry verdict=`FINAL REVIEW PASS`，Critical/Important/Minor=`0/0/0`【CONTEMPORANEOUS / VERIFIED】。
+- Recovery finding closure：
+  - 不再依赖`chmod`、filesystem permission或root/non-root行为；
+  - 通过公开`ApplyJournal.record` contract注入PREPARING journal persistence failure；
+  - 真实`ApplyCoordinator`返回`RECOVERY_REQUIRED`，repository验证为`partial_effect=false`；
+  - 未复制production rollback/recovery logic，未新增production seam。
+- Finalization artifact verification：
+  - `README.md`
+  - `.gitlab-ci.yml`
+  - `REFLECTION.md`
+  - `examples/governance_demo.py`
+  - `examples/feedback_demo.py`
+  - `examples/recovery_demo.py`
+  - `tests/demos/test_examples.py`
+  - `tests/finalization/test_submission.py`
+- Fresh test evidence：
+  - Finalization=`7 passed in 0.12s`；
+  - Demos=`3 passed in 0.11s`；
+  - Full regression=`980 passed / 1 failed in 26.76s`。
+- Full regression唯一failure=`test_worktree_baseline_is_clean`，由10个批准pre-commit dirty paths触发，分类为process cleanliness gate而非behavior regression；提交后的clean HEAD必须重新运行并关闭该门禁。
+- Scope/deviation confirmation：
+  - `SPEC.md`与`PLAN.md`保持冻结；
+  - 原PLAN延期的API、SSE、WebUI、Node runtime profile等能力没有被宣称已实现；
+  - Finalization仅完成课程提交范围的evidence、demo、CI、README与reflection；
+  - 未修改任何production contract。
+- Documentation sync validation：仅`AGENT_LOG.md`与`SPEC_PROCESS.md`发生本阶段修改；八个Finalization artifact在同步前后SHA-256一致；staging empty；artifact scan clean。
+- Gate：
+
+```text
+FINALIZATION_REVIEW_FIX_COMPLETE
+        ↓
+FINALIZATION_FINAL_REVIEW_PASS
+        ↓
+FINALIZATION_DOCUMENTATION_SYNC_COMPLETE
+```
+
+## GitHub Actions Finalization checkpoint
+
+- `2026-07-31 14:08:19 +0800`：人工确认远程托管平台为GitHub，并批准在Finalization feature branch增加最小真实GitHub Actions workflow【CONTEMPORANEOUS / APPROVED DECISION】。
+- `.gitlab-ci.yml`继续保留为课程要求artifact；本扩展不删除、不替换或修改GitLab配置。
+- Dependency investigation：
+  - source of truth=`pyproject.toml`；
+  - project dependencies=`[]`；
+  - 无`.[test]`、`.[dev]`、requirements、lock file或显式build backend；
+  - clean Python 3.12实测可安装project与pytest。
+- 初始Red：exact GitHub Actions contract node=`1 failed in 0.01s`，唯一failure=`EXPECTED_GITHUB_ACTIONS_MISSING`，无production/collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Workflow=`.github/workflows/unit-test.yml`：
+  - triggers=`main`与feature branch push、针对`main`的pull request、`workflow_dispatch`；
+  - job=`unit-test`，runner=`ubuntu-latest`，Python=`3.12`，permissions=`contents: read`；
+  - 无API key、Docker daemon、services、cache、artifact upload、coverage或外部测试服务；
+  - `PYTHONDONTWRITEBYTECODE=1`且pytest使用`-p no:cacheprovider`。
+- Install investigation发现editable及普通in-tree pip install会分别生成`src/coding_harness.egg-info/`和`build/`，使既有cleanliness gate失败；上述调查artifact已精确删除。最终workflow用`git archive HEAD`导出同一提交到`$RUNNER_TEMP`，从临时副本普通安装project，再安装pytest，不污染checkout且不修改packaging metadata。
+- 安装策略review-fix Red=`1 failed in 0.01s`；workflow修正后exact Green=`1 passed in 0.01s`【CONTEMPORANEOUS / VERIFIED】。
+- Local evidence：
+  - Finalization=`8 passed in 0.13s`；
+  - Demos=`3 passed in 0.12s`；
+  - Full regression=`981 passed / 1 failed in 27.39s`；
+  - 唯一failure=`test_worktree_baseline_is_clean`，由三个批准pre-commit dirty paths触发，不是behavior regression。
+- README仅说明workflow位置、triggers、Python 3.12、完整pytest与无外部authority；明确远程GitHub Actions run尚待push后验证。
+- Boundary：新增scope仅为远程CI artifact、Finalization contract与必要README/process同步；未修改production behavior、既有tests、`SPEC.md`、`PLAN.md`或`.gitlab-ci.yml`；未commit/push/PR/merge。
+- Gate：
+
+```text
+GITHUB_ACTIONS_RED_COMPLETE
+        ↓
+GITHUB_ACTIONS_IMPLEMENTATION_COMPLETE
+        ↓
+GITHUB_ACTIONS_REVIEW_PENDING
+```
+
+### GitHub Actions Review Fix checkpoint
+
+- `2026-08-01 15:43:56 +0800`：GitHub Actions只读review verdict=`CHANGES_REQUIRED`，Critical/Important/Minor=`0/2/1`【CONTEMPORANEOUS / VERIFIED】。
+- Important findings：安装step以固定目录配合`mkdir -p`，不能证明目录全新且archive pipeline没有显式pipefail；Finalization contract仅做substring matching，不能证明GitHub Actions YAML的trigger/job/permissions/steps真实结构。
+- `GITHUB_ACTIONS_REVIEW_FIX_STARTED`：TDD先将contract改为用PyYAML `BaseLoader`解析mapping/list结构，显式验证字符串键`on`及其trigger层级，避免普通YAML 1.1 loader把`on`解释为布尔值。旧workflow精确Red=`1 failed in 0.05s`，失败原因与上述安装finding一致，无collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- 最小fix：安装step首行使用`set -euo pipefail`；通过`mktemp -d "$RUNNER_TEMP/coding-harness-source.XXXXXX"`创建fresh目录；`git archive --format=tar HEAD | tar -xf - -C "$source_dir"`在同一受pipefail保护的shell中执行；project从临时副本安装，checkout不生成packaging artifact。为结构化contract显式安装`pytest PyYAML`。
+- Network boundary：dependency provisioning通常需要访问Python package index；安装完成后的pytest逻辑不访问外部服务，不需要API key、Docker daemon、远程模型或业务API。README已与此边界同步；远程GitHub Actions run仍待push后验证。
+- Green evidence：exact contract=`1 passed in 0.04s`；真实archive/temp pip install及package import smoke=`PASS`，checkout无`build/`、`dist/`或`*.egg-info`；Finalization=`8 passed in 0.20s`；Demos=`3 passed in 0.14s`；full=`981 passed / 1 failed in 28.52s`。唯一failure=`test_worktree_baseline_is_clean`，精确由五个批准pre-commit dirty paths触发，不是behavior regression【CONTEMPORANEOUS / VERIFIED】。
+- Boundary：`actions/setup-python@v5`按人工决定不升级；未修改production、`SPEC.md`、`PLAN.md`、`.gitlab-ci.yml`、既有tests、`REFLECTION.md`或`examples/**`；未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REVIEW
+        ↓
+CHANGES_REQUIRED
+        ↓
+GITHUB_ACTIONS_REVIEW_FIX_STARTED
+        ↓
+GITHUB_ACTIONS_REVIEW_FIX_COMPLETE
+        ↓
+GITHUB_ACTIONS_FINAL_REVIEW_PENDING
+```
+
+### GitHub Actions Final Review and Documentation Sync checkpoint
+
+- `2026-08-01 15:51:42 +0800`：严格只读Final Review Retry verdict=`GITHUB ACTIONS REVIEW PASS`，Critical/Important/Minor=`0/0/0`【CONTEMPORANEOUS / VERIFIED】。
+- Findings closure：archive安装使用`mktemp` fresh directory与`set -euo pipefail`，pipeline failure propagation独立验证为PASS；workflow contract使用PyYAML `BaseLoader`结构化验证真实mapping/list，字符串键`on`及push/PR/manual trigger层级正确，不再依赖全文substring matching。
+- Workflow boundary：仅实现最小GitHub Actions CI/finalization infrastructure；依赖provisioning可访问Python package index，测试逻辑不访问外部服务且不需要API key或Docker daemon；remote GitHub Actions run仍待push后验证，不声明在线CI通过。
+- Fresh local evidence：Finalization=`8 passed`；Demos=`3 passed`；full regression=`981 passed / 1 failed`。唯一failure=`test_worktree_baseline_is_clean`，由五个批准pre-commit dirty paths触发，分类为process cleanliness gate而非behavior regression【VERIFIED】。
+- Scope：无production behavior变化；`SPEC.md`、`PLAN.md`、`.gitlab-ci.yml`、既有tests、`REFLECTION.md`与`examples/**`未修改。本documentation sync仅修改`AGENT_LOG.md`与`SPEC_PROCESS.md`，未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REVIEW_PASS
+        ↓
+GITHUB_ACTIONS_DOCUMENTATION_SYNC_COMPLETE
+        ↓
+GITHUB_ACTIONS_COMMIT_PENDING
+```
+
+### GitHub Actions Remote Verification checkpoint
+
+- `2026-08-01 16:19:43 +0800`：人工报告`.github/workflows/unit-test.yml`在commit `90d76b5c1e72b7fe4f50c85b38809fb7ca4170c0`的远程GitHub Actions run状态为`Success`，remote verification=`PASS`【USER_REPORTED】。
+- 原失败根因：`actions/checkout@v6`默认shallow clone，导致ancestry verification所需commit `d3169f6e8ed0ff32afccfdde9504c8f42e710a97`不存在于checkout history。
+- 修复：checkout step增加`with.fetch-depth: 0`；Finalization contract同时要求该结构。修复没有删除、绕过或弱化ancestor verification，也没有修改历史commit identity。
+- Remote evidence：人工确认shallow-checkout问题已关闭且workflow成功；本地`git ls-remote`独立确认feature remote HEAD=`90d76b5c1e72b7fe4f50c85b38809fb7ca4170c0`【USER_REPORTED / VERIFIED AS MARKED】。
+- Boundary：`SPEC.md`、`PLAN.md`、production、tests、workflow与README在本sync中均未修改；仅同步`AGENT_LOG.md`和`SPEC_PROCESS.md`，未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REMOTE_VERIFICATION_PASS
+        ↓
+GITHUB_ACTIONS_REMOTE_DOCUMENTATION_SYNC_COMPLETE
+        ↓
+CLOSEOUT_COMMIT_PENDING
+```
