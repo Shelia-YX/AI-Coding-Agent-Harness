@@ -2395,3 +2395,20 @@ GITHUB_ACTIONS_DOCUMENTATION_SYNC_COMPLETE
         ↓
 GITHUB_ACTIONS_COMMIT_PENDING
 ```
+
+### GitHub Actions Remote Verification checkpoint
+
+- `2026-08-01 16:19:43 +0800`：人工报告`.github/workflows/unit-test.yml`在commit `90d76b5c1e72b7fe4f50c85b38809fb7ca4170c0`的远程GitHub Actions run状态为`Success`，remote verification=`PASS`【USER_REPORTED】。
+- 原失败根因：`actions/checkout@v6`默认shallow clone，导致ancestry verification所需commit `d3169f6e8ed0ff32afccfdde9504c8f42e710a97`不存在于checkout history。
+- 修复：checkout step增加`with.fetch-depth: 0`；Finalization contract同时要求该结构。修复没有删除、绕过或弱化ancestor verification，也没有修改历史commit identity。
+- Remote evidence：人工确认shallow-checkout问题已关闭且workflow成功；本地`git ls-remote`独立确认feature remote HEAD=`90d76b5c1e72b7fe4f50c85b38809fb7ca4170c0`【USER_REPORTED / VERIFIED AS MARKED】。
+- Boundary：`SPEC.md`、`PLAN.md`、production、tests、workflow与README在本sync中均未修改；仅同步`AGENT_LOG.md`和`SPEC_PROCESS.md`，未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REMOTE_VERIFICATION_PASS
+        ↓
+GITHUB_ACTIONS_REMOTE_DOCUMENTATION_SYNC_COMPLETE
+        ↓
+CLOSEOUT_COMMIT_PENDING
+```
