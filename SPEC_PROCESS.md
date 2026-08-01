@@ -2321,3 +2321,77 @@ FINALIZATION_FINAL_REVIEW_PASS
         ↓
 FINALIZATION_DOCUMENTATION_SYNC_COMPLETE
 ```
+
+## GitHub Actions Finalization checkpoint
+
+- `2026-07-31 14:08:19 +0800`：人工确认远程托管平台为GitHub，并批准在Finalization feature branch增加最小真实GitHub Actions workflow【CONTEMPORANEOUS / APPROVED DECISION】。
+- `.gitlab-ci.yml`继续保留为课程要求artifact；本扩展不删除、不替换或修改GitLab配置。
+- Dependency investigation：
+  - source of truth=`pyproject.toml`；
+  - project dependencies=`[]`；
+  - 无`.[test]`、`.[dev]`、requirements、lock file或显式build backend；
+  - clean Python 3.12实测可安装project与pytest。
+- 初始Red：exact GitHub Actions contract node=`1 failed in 0.01s`，唯一failure=`EXPECTED_GITHUB_ACTIONS_MISSING`，无production/collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- Workflow=`.github/workflows/unit-test.yml`：
+  - triggers=`main`与feature branch push、针对`main`的pull request、`workflow_dispatch`；
+  - job=`unit-test`，runner=`ubuntu-latest`，Python=`3.12`，permissions=`contents: read`；
+  - 无API key、Docker daemon、services、cache、artifact upload、coverage或外部测试服务；
+  - `PYTHONDONTWRITEBYTECODE=1`且pytest使用`-p no:cacheprovider`。
+- Install investigation发现editable及普通in-tree pip install会分别生成`src/coding_harness.egg-info/`和`build/`，使既有cleanliness gate失败；上述调查artifact已精确删除。最终workflow用`git archive HEAD`导出同一提交到`$RUNNER_TEMP`，从临时副本普通安装project，再安装pytest，不污染checkout且不修改packaging metadata。
+- 安装策略review-fix Red=`1 failed in 0.01s`；workflow修正后exact Green=`1 passed in 0.01s`【CONTEMPORANEOUS / VERIFIED】。
+- Local evidence：
+  - Finalization=`8 passed in 0.13s`；
+  - Demos=`3 passed in 0.12s`；
+  - Full regression=`981 passed / 1 failed in 27.39s`；
+  - 唯一failure=`test_worktree_baseline_is_clean`，由三个批准pre-commit dirty paths触发，不是behavior regression。
+- README仅说明workflow位置、triggers、Python 3.12、完整pytest与无外部authority；明确远程GitHub Actions run尚待push后验证。
+- Boundary：新增scope仅为远程CI artifact、Finalization contract与必要README/process同步；未修改production behavior、既有tests、`SPEC.md`、`PLAN.md`或`.gitlab-ci.yml`；未commit/push/PR/merge。
+- Gate：
+
+```text
+GITHUB_ACTIONS_RED_COMPLETE
+        ↓
+GITHUB_ACTIONS_IMPLEMENTATION_COMPLETE
+        ↓
+GITHUB_ACTIONS_REVIEW_PENDING
+```
+
+### GitHub Actions Review Fix checkpoint
+
+- `2026-08-01 15:43:56 +0800`：GitHub Actions只读review verdict=`CHANGES_REQUIRED`，Critical/Important/Minor=`0/2/1`【CONTEMPORANEOUS / VERIFIED】。
+- Important findings：安装step以固定目录配合`mkdir -p`，不能证明目录全新且archive pipeline没有显式pipefail；Finalization contract仅做substring matching，不能证明GitHub Actions YAML的trigger/job/permissions/steps真实结构。
+- `GITHUB_ACTIONS_REVIEW_FIX_STARTED`：TDD先将contract改为用PyYAML `BaseLoader`解析mapping/list结构，显式验证字符串键`on`及其trigger层级，避免普通YAML 1.1 loader把`on`解释为布尔值。旧workflow精确Red=`1 failed in 0.05s`，失败原因与上述安装finding一致，无collection/environment failure【CONTEMPORANEOUS / VERIFIED】。
+- 最小fix：安装step首行使用`set -euo pipefail`；通过`mktemp -d "$RUNNER_TEMP/coding-harness-source.XXXXXX"`创建fresh目录；`git archive --format=tar HEAD | tar -xf - -C "$source_dir"`在同一受pipefail保护的shell中执行；project从临时副本安装，checkout不生成packaging artifact。为结构化contract显式安装`pytest PyYAML`。
+- Network boundary：dependency provisioning通常需要访问Python package index；安装完成后的pytest逻辑不访问外部服务，不需要API key、Docker daemon、远程模型或业务API。README已与此边界同步；远程GitHub Actions run仍待push后验证。
+- Green evidence：exact contract=`1 passed in 0.04s`；真实archive/temp pip install及package import smoke=`PASS`，checkout无`build/`、`dist/`或`*.egg-info`；Finalization=`8 passed in 0.20s`；Demos=`3 passed in 0.14s`；full=`981 passed / 1 failed in 28.52s`。唯一failure=`test_worktree_baseline_is_clean`，精确由五个批准pre-commit dirty paths触发，不是behavior regression【CONTEMPORANEOUS / VERIFIED】。
+- Boundary：`actions/setup-python@v5`按人工决定不升级；未修改production、`SPEC.md`、`PLAN.md`、`.gitlab-ci.yml`、既有tests、`REFLECTION.md`或`examples/**`；未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REVIEW
+        ↓
+CHANGES_REQUIRED
+        ↓
+GITHUB_ACTIONS_REVIEW_FIX_STARTED
+        ↓
+GITHUB_ACTIONS_REVIEW_FIX_COMPLETE
+        ↓
+GITHUB_ACTIONS_FINAL_REVIEW_PENDING
+```
+
+### GitHub Actions Final Review and Documentation Sync checkpoint
+
+- `2026-08-01 15:51:42 +0800`：严格只读Final Review Retry verdict=`GITHUB ACTIONS REVIEW PASS`，Critical/Important/Minor=`0/0/0`【CONTEMPORANEOUS / VERIFIED】。
+- Findings closure：archive安装使用`mktemp` fresh directory与`set -euo pipefail`，pipeline failure propagation独立验证为PASS；workflow contract使用PyYAML `BaseLoader`结构化验证真实mapping/list，字符串键`on`及push/PR/manual trigger层级正确，不再依赖全文substring matching。
+- Workflow boundary：仅实现最小GitHub Actions CI/finalization infrastructure；依赖provisioning可访问Python package index，测试逻辑不访问外部服务且不需要API key或Docker daemon；remote GitHub Actions run仍待push后验证，不声明在线CI通过。
+- Fresh local evidence：Finalization=`8 passed`；Demos=`3 passed`；full regression=`981 passed / 1 failed`。唯一failure=`test_worktree_baseline_is_clean`，由五个批准pre-commit dirty paths触发，分类为process cleanliness gate而非behavior regression【VERIFIED】。
+- Scope：无production behavior变化；`SPEC.md`、`PLAN.md`、`.gitlab-ci.yml`、既有tests、`REFLECTION.md`与`examples/**`未修改。本documentation sync仅修改`AGENT_LOG.md`与`SPEC_PROCESS.md`，未stage/commit/push/PR。
+- Gate：
+
+```text
+GITHUB_ACTIONS_REVIEW_PASS
+        ↓
+GITHUB_ACTIONS_DOCUMENTATION_SYNC_COMPLETE
+        ↓
+GITHUB_ACTIONS_COMMIT_PENDING
+```

@@ -6,11 +6,13 @@ from types import ModuleType
 from typing import Final
 
 import pytest
+import yaml
 
 
 ROOT: Final = Path(__file__).resolve().parents[2]
 README: Final = ROOT / "README.md"
 CI_CONFIG: Final = ROOT / ".gitlab-ci.yml"
+GITHUB_ACTIONS_CONFIG: Final = ROOT / ".github" / "workflows" / "unit-test.yml"
 REFLECTION: Final = ROOT / "REFLECTION.md"
 PROCESS: Final = ROOT / "SPEC_PROCESS.md"
 
@@ -49,6 +51,56 @@ def test_ci_has_offline_unit_test_job_without_external_authority() -> None:
     assert "PYTHONDONTWRITEBYTECODE" in text
     forbidden = ("API_KEY", "docker ", "curl ", "wget ", "services:")
     assert not any(item in text for item in forbidden)
+
+
+def test_github_actions_runs_full_offline_suite() -> None:
+    assert GITHUB_ACTIONS_CONFIG.is_file(), "EXPECTED_GITHUB_ACTIONS_MISSING"
+    text = GITHUB_ACTIONS_CONFIG.read_text(encoding="utf-8")
+    workflow = yaml.load(text, Loader=yaml.BaseLoader)
+    assert isinstance(workflow, dict)
+    assert workflow["name"] == "unit-test"
+
+    triggers = workflow["on"]
+    assert isinstance(triggers, dict)
+    assert triggers["push"]["branches"] == [
+        "main",
+        "project-finalization-course-submission",
+    ]
+    assert triggers["pull_request"]["branches"] == ["main"]
+    assert "workflow_dispatch" in triggers
+    assert "pull_request_target" not in triggers
+    assert workflow["permissions"] == {"contents": "read"}
+
+    jobs = workflow["jobs"]
+    assert isinstance(jobs, dict)
+    assert set(jobs) == {"unit-test"}
+    job = jobs["unit-test"]
+    assert job["runs-on"] == "ubuntu-latest"
+    assert int(job["timeout-minutes"]) <= 30
+    assert job["env"] == {"PYTHONDONTWRITEBYTECODE": "1"}
+    assert "services" not in job
+
+    steps = job["steps"]
+    checkout = next(step for step in steps if step.get("uses") == "actions/checkout@v6")
+    setup = next(step for step in steps if step.get("uses") == "actions/setup-python@v5")
+    assert checkout == {"name": "Check out repository", "uses": "actions/checkout@v6"}
+    assert setup["with"] == {"python-version": "3.12"}
+
+    install = next(step for step in steps if step.get("name") == "Install dependencies")
+    install_lines = [line.strip() for line in install["run"].splitlines() if line.strip()]
+    assert install_lines == [
+        "set -euo pipefail",
+        'source_dir="$(mktemp -d "$RUNNER_TEMP/coding-harness-source.XXXXXX")"',
+        'git archive --format=tar HEAD | tar -xf - -C "$source_dir"',
+        'python -m pip install "$source_dir"',
+        "python -m pip install pytest PyYAML",
+    ]
+
+    test_step = next(step for step in steps if step.get("name") == "Run full test suite")
+    assert test_step["run"].strip() == "python -m pytest -p no:cacheprovider -q"
+
+    used_actions = {step.get("uses") for step in steps if "uses" in step}
+    assert used_actions == {"actions/checkout@v6", "actions/setup-python@v5"}
 
 
 def test_reflection_contains_final_course_closeout() -> None:

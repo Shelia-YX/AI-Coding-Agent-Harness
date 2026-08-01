@@ -73,6 +73,13 @@ PYTHONPATH=src python3 examples/recovery_demo.py
 index；安装完成后的测试执行不访问网络、不需要 API key，也不需要 Docker daemon 或
 其他 external service。
 
+GitHub 托管使用 `.github/workflows/unit-test.yml`：feature branch push、针对 `main`
+的 pull request 和手动 `workflow_dispatch` 都会在 Ubuntu、Python 3.12 上安装项目与
+pytest/PyYAML，并运行完整测试。依赖 provisioning 通常需要访问 Python package index；
+安装后的测试逻辑不访问外部服务，也不需要 API key 或 Docker daemon。
+`.gitlab-ci.yml` 仍作为课程要求 artifact 保留。该说明只描述 workflow 配置；远程
+GitHub Actions run 尚待 push 后验证。
+
 ## Recovery
 
 Apply 失败时由 `ApplyCoordinator` 根据 durable journal 执行 rollback。无法确定或无法

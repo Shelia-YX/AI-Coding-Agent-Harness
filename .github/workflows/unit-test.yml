@@ -1,0 +1,43 @@
+name: unit-test
+
+on:
+  push:
+    branches:
+      - main
+      - project-finalization-course-submission
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          source_dir="$(mktemp -d "$RUNNER_TEMP/coding-harness-source.XXXXXX")"
+          git archive --format=tar HEAD | tar -xf - -C "$source_dir"
+          python -m pip install "$source_dir"
+          python -m pip install pytest PyYAML
+
+      - name: Run full test suite
+        run: |
+          python -m pytest -p no:cacheprovider -q
