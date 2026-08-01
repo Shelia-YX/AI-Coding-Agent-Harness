@@ -83,7 +83,11 @@ def test_github_actions_runs_full_offline_suite() -> None:
     steps = job["steps"]
     checkout = next(step for step in steps if step.get("uses") == "actions/checkout@v6")
     setup = next(step for step in steps if step.get("uses") == "actions/setup-python@v5")
-    assert checkout == {"name": "Check out repository", "uses": "actions/checkout@v6"}
+    assert checkout == {
+        "name": "Check out repository",
+        "uses": "actions/checkout@v6",
+        "with": {"fetch-depth": "0"},
+    }
     assert setup["with"] == {"python-version": "3.12"}
 
     install = next(step for step in steps if step.get("name") == "Install dependencies")
